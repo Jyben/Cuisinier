@@ -1,0 +1,166 @@
+.menu-form-card {
+    margin-bottom: 1rem;
+}
+
+.menu-form-content {
+    padding: 1rem !important;
+}
+
+@media (min-width: 600px) {
+    .menu-form-content {
+        padding: 1.5rem !important;
+    }
+}
+
+/* Améliorer l'affichage des HelperText sur mobile */
+.mud-input-helper-text {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.4 !important;
+}
+
+/* S'assurer que les labels ne sont pas tronqués */
+.mud-input-label {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+}
+
+/* Améliorer les boutons sur mobile */
+.mud-button-root {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    text-align: center !important;
+}
+
+/* Améliorer l'affichage des chips sur mobile */
+.mud-chip {
+    margin: 0.25rem !important;
+    max-width: 100% !important;
+}
+
+/* Options container */
+.options-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Option cards */
+.option-card {
+    border-radius: var(--mud-default-borderradius, 8px) !important;
+    transition: all 0.2s ease;
+    background: var(--mud-palette-background-paper) !important;
+}
+
+.option-card.option-active {
+    background: rgba(232, 90, 79, 0.03) !important;
+}
+
+.option-card.option-inactive {
+    background: rgba(0, 0, 0, 0.02) !important;
+    opacity: 0.8;
+}
+
+.option-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+@media (max-width: 600px) {
+    .options-container {
+        gap: 0.75rem;
+    }
+
+    .option-card {
+        margin: 0;
+    }
+}
+
+/* Types de plats container */
+.types-plats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Type plat card */
+.type-plat-card {
+    border-radius: var(--mud-default-borderradius, 8px) !important;
+    transition: all 0.2s ease;
+    background: var(--mud-palette-background-paper) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.type-plat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border-color: rgba(232, 90, 79, 0.2) !important;
+}
+
+.delete-type-button {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+}
+
+.delete-type-button:hover {
+    opacity: 1;
+}
+
+@media (max-width: 600px) {
+    .types-plats-container {
+        gap: 0.75rem;
+    }
+
+    .type-plat-card {
+        margin: 0;
+    }
+}
+
+/* Nombre de plats container */
+.nombre-plats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Nombre plat card */
+.nombre-plat-card {
+    border-radius: var(--mud-default-borderradius, 8px) !important;
+    transition: all 0.2s ease;
+    background: var(--mud-palette-background-paper) !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.nombre-plat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    border-color: rgba(232, 90, 79, 0.2) !important;
+}
+
+.delete-plat-button {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+}
+
+.delete-plat-button:hover {
+    opacity: 1;
+}
+
+@media (max-width: 600px) {
+    .nombre-plats-container {
+        gap: 0.75rem;
+    }
+
+    .nombre-plat-card {
+        margin: 0;
+    }
+}
+
+/* Helper text color */
+.helper-text-secondary {
+    color: rgba(0, 0, 0, 0.6);
+}
+

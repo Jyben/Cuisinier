@@ -1,0 +1,180 @@
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@using Markdig
+@inject IDialogService DialogService
+
+<MudCard Elevation="2" Class="recette-card">
+    @if (!string.IsNullOrEmpty(Recipe.ImageUrl))
+    {
+        <MudImage Src="@Recipe.ImageUrl" Alt="@Recipe.Title" Height="160" ObjectFit="ObjectFit.Cover" />
+    }
+    <MudCardContent Class="pa-3">
+        <MudText Typo="Typo.h6" Class="mb-1" Style="font-weight: 600;">@Recipe.Title</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(0,0,0,0.6); line-height: 1.4;">@Recipe.Description</MudText>
+        
+        @if (ShowDetails && !string.IsNullOrEmpty(Recipe.CompleteDescription))
+        {
+            <MudExpansionPanels Class="mb-2">
+                <MudExpansionPanel Text="Recette complète" Icon="@Icons.Material.Filled.Receipt">
+                    <MudText Typo="Typo.body2">@Recipe.CompleteDescription</MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudTooltip Text="Nombre de personnes">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="color: rgba(0,0,0,0.54);" />
+            </MudTooltip>
+            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@Recipe.Servings</MudText>
+            @if (Recipe.PreparationTime.HasValue)
+            {
+                <MudTooltip Text="Temps de préparation">
+                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)Recipe.PreparationTime.Value.TotalMinutes)min</MudText>
+            }
+            @if (Recipe.CookingTime.HasValue)
+            {
+                <MudTooltip Text="Temps de cuisson">
+                    <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)Recipe.CookingTime.Value.TotalMinutes)min</MudText>
+            }
+            @if (Recipe.Kcal.HasValue)
+            {
+                <MudTooltip Text="Calories">
+                    <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                </MudTooltip>
+                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@Recipe.Kcal.Value kcal</MudText>
+            }
+        </MudStack>
+        
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="Ingrédients" Icon="@Icons.Material.Filled.ListAlt">
+                <div style="padding: 0; margin: 0;">
+                    @foreach (var ingredient in Recipe.Ingredients)
+                    {
+                        <div style="padding: 2px 0; line-height: 1.2; font-size: 0.875rem;">
+                            <span style="font-weight: 500;">@ingredient.Name</span>: <span style="color: rgba(0,0,0,0.7);">@ingredient.Quantity</span>
+                        </div>
+                    }
+                </div>
+            </MudExpansionPanel>
+            @if (MenuValid)
+            {
+                @if (IsGenerating)
+                {
+                    <MudButton 
+                        Variant="Variant.Text" 
+                        Size="Size.Small" 
+                        Color="Color.Primary" 
+                        FullWidth="true"
+                        Disabled="true"
+                        Class="mt-2 recette-detail-button">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="width: 16px; height: 16px;" />
+                            <span style="opacity: 0.7;">Génération de la recette détaillée...</span>
+                        </MudStack>
+                    </MudButton>
+                }
+                else if (!string.IsNullOrEmpty(Recipe.DetailedRecipe))
+                {
+                    <MudButton 
+                        Variant="Variant.Text" 
+                        Size="Size.Small" 
+                        Color="Color.Primary" 
+                        FullWidth="true"
+                        OnClick="OpenDetailedRecipe"
+                        StartIcon="@Icons.Material.Filled.Receipt"
+                        Class="mt-2 recette-detail-button">
+                        Voir la recette détaillée
+                    </MudButton>
+                }
+            }
+        </MudExpansionPanels>
+    </MudCardContent>
+    @if (ShowActions)
+    {
+        <MudCardActions Class="pa-3 pt-0">
+            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Style="width: 100%;">
+                @if (OnReplace.HasDelegate)
+                {
+                    <MudButton 
+                        Variant="Variant.Outlined" 
+                        Size="Size.Small" 
+                        Color="Color.Primary" 
+                        OnClick="() => OnReplace.InvokeAsync(Recipe.Id)"
+                        StartIcon="@Icons.Material.Filled.SwapHoriz"
+                        Class="action-button">
+                        Remplacer
+                    </MudButton>
+                }
+                @if (OnDelete.HasDelegate)
+                {
+                    <MudButton 
+                        Variant="Variant.Outlined" 
+                        Size="Size.Small" 
+                        Color="Color.Error" 
+                        OnClick="() => OnDelete.InvokeAsync(Recipe.Id)"
+                        StartIcon="@Icons.Material.Filled.Delete"
+                        Class="action-button">
+                        Supprimer
+                    </MudButton>
+                }
+            </MudStack>
+        </MudCardActions>
+    }
+</MudCard>
+
+@code {
+    [Parameter] public RecipeResponse Recipe { get; set; } = new();
+    [Parameter] public bool ShowDetails { get; set; } = false;
+    [Parameter] public bool ShowActions { get; set; } = false;
+    [Parameter] public bool IsGenerating { get; set; } = false;
+    [Parameter] public bool MenuValid { get; set; } = false;
+    [Parameter] public EventCallback<int> OnDelete { get; set; }
+    [Parameter] public EventCallback<int> OnReplace { get; set; }
+
+    private async Task OpenDetailedRecipe()
+    {
+        var parameters = new DialogParameters<RecipeDetailsDialog>
+        {
+            { x => x.Recipe, Recipe }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<RecipeDetailsDialog>("Recette détaillée", parameters, options);
+    }
+}
+
+<style>
+    .action-button {
+        text-transform: none;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+
+    .recette-detail-button {
+        text-transform: none;
+        font-weight: 500;
+        justify-content: flex-start;
+        margin-top: 0.5rem;
+    }
+
+    /* Arrondir le bas du dernier panel dans MudExpansionPanels - cibler tous les éléments possibles */
+    .recette-card .mud-expansion-panels .mud-expansion-panel:last-child,
+    .recette-card .mud-expansion-panels .mud-expansion-panel:last-child > *,
+    .recette-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header,
+    .recette-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-content,
+    .recette-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header > * {
+        border-bottom-left-radius: var(--mud-default-borderradius, 4px) !important;
+        border-bottom-right-radius: var(--mud-default-borderradius, 4px) !important;
+    }
+</style>
+

@@ -1,0 +1,78 @@
+@using MudBlazor
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.h6" Class="mb-2">Types de plats</MudText>
+<MudText Typo="Typo.body2" Class="mb-4 helper-text-secondary">Indiquez les types de plats souhaités. Le nombre est optionnel (ex: 1 plat de viande rouge)</MudText>
+
+<div class="types-plats-container">
+    @for (int i = 0; i < TypesValues.Count; i++)
+    {
+        var index = i;
+        var localIndex = index;
+        int? localValue = localIndex < NumberValues.Count ? NumberValues[localIndex] : null;
+        <MudPaper Elevation="1" Class="type-plat-card">
+            <MudStack Spacing="3" Class="pa-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                  Color="Color.Error" 
+                                  Size="Size.Small"
+                                  Variant="Variant.Text"
+                                  OnClick="@(() => OnRemove.InvokeAsync(index))"
+                                  Class="delete-type-button" />
+                </MudStack>
+                
+                <MudSelect T="string" 
+                          Value="@TypesValues[index]"
+                          ValueChanged="@((string value) => {
+                              TypesValues[index] = value;
+                              OnChange.InvokeAsync();
+                          })"
+                          Label="Type de plat"
+                          Variant="Variant.Outlined"
+                          FullWidth="true">
+                    @foreach (var typeOption in TypeOptions)
+                    {
+                        <MudSelectItem Value="@typeOption">@typeOption</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudStack Spacing="2">
+                    <MudNumericField T="int?" 
+                                    Value="@localValue"
+                                    ValueChanged="@((int? value) => {
+                                        while (NumberValues.Count <= localIndex)
+                                        {
+                                            NumberValues.Add(null);
+                                        }
+                                        NumberValues[localIndex] = value;
+                                        OnChange.InvokeAsync();
+                                    })"
+                                    Label="Nombre (optionnel)"
+                                    HelperText="@(localValue.HasValue ? $"{localValue.Value} fois" : "Laisser vide si le nombre n'est pas important")"
+                                    Min="1"
+                                    Max="20"
+                                    Variant="Variant.Outlined"
+                                    FullWidth="true" />
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</div>
+
+<MudButton Variant="Variant.Text" 
+          StartIcon="@Icons.Material.Filled.Add" 
+          OnClick="OnAdd"
+          FullWidth="true"
+          Class="mb-4 mt-3">
+    Ajouter un type de plat
+</MudButton>
+
+@code {
+    [Parameter] public List<string> TypeOptions { get; set; } = new();
+    [Parameter] public List<string> TypesValues { get; set; } = new();
+    [Parameter] public List<int?> NumberValues { get; set; } = new();
+    [Parameter] public EventCallback<int> OnRemove { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnChange { get; set; }
+}
+

@@ -1,0 +1,104 @@
+@using MudBlazor
+@using Cuisinier.Core.DTOs
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.h6" Class="mb-2">Options</MudText>
+<MudText Typo="Typo.body2" Class="mb-4 helper-text-secondary">Caractéristiques des plats souhaités</MudText>
+
+<MudPaper Elevation="1" Class="pa-2">
+    <MudStack Spacing="0">
+        @foreach (var option in OptionsWithIntensity)
+        {
+            var currentOption = option;
+            var currentValue = WeightedOptions.GetValueOrDefault(currentOption);
+            var isActive = currentValue.HasValue;
+            var displayValue = currentValue ?? 0;
+            var titleColor = isActive ? "var(--color-primary)" : "rgba(0,0,0,0.6)";
+            
+            <MudStack Spacing="1" Class="py-1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle1" Style="@($"font-weight: 600; color: {titleColor};")">
+                        @currentOption
+                    </MudText>
+                    <MudSwitch T="bool"
+                              Value="@isActive"
+                              ValueChanged="@((bool value) => {
+                                  if (!value) WeightedOptions[currentOption] = null;
+                                  else WeightedOptions[currentOption] = 50;
+                                  OnChange.InvokeAsync();
+                              })"
+                              Color="Color.Primary" />
+                </MudStack>
+                
+                @if (isActive)
+                {
+                    <MudDivider Class="my-1" />
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.caption" Class="helper-text-secondary" Style="font-weight: 500;">Intensité</MudText>
+                            <MudChip T="string" 
+                                    Size="Size.Small" 
+                                    Color="Color.Primary" 
+                                    Variant="Variant.Filled"
+                                    Style="font-weight: 600; min-width: 50px; justify-content: center;">
+                                @displayValue%
+                            </MudChip>
+                        </MudStack>
+                        <MudSlider T="int" 
+                                  Value="@displayValue"
+                                  ValueChanged="@((int value) => {
+                                      WeightedOptions[currentOption] = value;
+                                      OnChange.InvokeAsync();
+                                  })"
+                                  Min="0"
+                                  Max="100"
+                                  Color="Color.Primary"
+                                  Class="mt-1" />
+                    </MudStack>
+                }
+            </MudStack>
+            
+            @if (option != OptionsWithIntensity.Last() || BooleanOptions.Any())
+            {
+                <MudDivider Class="my-0" />
+            }
+        }
+        
+        @foreach (var option in BooleanOptions)
+        {
+            var currentOption = option;
+            var currentValue = WeightedOptions.GetValueOrDefault(currentOption);
+            var isActive = currentValue.HasValue && currentValue.Value > 0;
+            var titleColor = isActive ? "var(--color-primary)" : "rgba(0,0,0,0.6)";
+            
+            <MudStack Spacing="0" Class="py-1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle1" Style="@($"font-weight: 600; color: {titleColor};")">
+                        @currentOption
+                    </MudText>
+                    <MudSwitch T="bool"
+                              Value="@isActive"
+                              ValueChanged="@((bool value) => {
+                                  if (!value) WeightedOptions[currentOption] = null;
+                                  else WeightedOptions[currentOption] = 100;
+                                  OnChange.InvokeAsync();
+                              })"
+                              Color="Color.Primary" />
+                </MudStack>
+            </MudStack>
+            
+            @if (option != BooleanOptions.Last())
+            {
+                <MudDivider Class="my-0" />
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public Dictionary<string, int?> WeightedOptions { get; set; } = new();
+    [Parameter] public List<string> OptionsWithIntensity { get; set; } = new();
+    [Parameter] public List<string> BooleanOptions { get; set; } = new();
+    [Parameter] public EventCallback OnChange { get; set; }
+}
+

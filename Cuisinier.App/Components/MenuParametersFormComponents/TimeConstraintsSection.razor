@@ -1,0 +1,56 @@
+@using MudBlazor
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.h6" Class="mb-3">Temps de préparation et cuisson</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" md="6">
+        <MudSwitch T="bool" 
+                  Value="@LimitPreparation" 
+                  ValueChanged="@((bool value) => LimitPreparationChanged.InvokeAsync(value))"
+                  Label="Limiter le temps de préparation"
+                  Color="Color.Primary" />
+        @if (LimitPreparation)
+        {
+            <MudNumericField T="int" 
+                             Value="@PreparationMinutes"
+                             ValueChanged="@((int value) => PreparationMinutesChanged.InvokeAsync(value))"
+                             Label="Temps maximum (minutes)"
+                             Min="5"
+                             Max="300"
+                             Variant="Variant.Outlined"
+                             Class="mt-2" />
+        }
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudSwitch T="bool" 
+                  Value="@LimitCooking"
+                  ValueChanged="@((bool value) => LimitCookingChanged.InvokeAsync(value))"
+                  Label="Limiter le temps de cuisson"
+                  Color="Color.Primary" />
+        @if (LimitCooking)
+        {
+            <MudNumericField T="int" 
+                             Value="@CookingMinutes"
+                             ValueChanged="@((int value) => CookingMinutesChanged.InvokeAsync(value))"
+                             Label="Temps maximum (minutes)"
+                             Min="5"
+                             Max="600"
+                             Variant="Variant.Outlined"
+                             Class="mt-2" />
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter] public bool LimitPreparation { get; set; }
+    [Parameter] public EventCallback<bool> LimitPreparationChanged { get; set; }
+    [Parameter] public int PreparationMinutes { get; set; } = 15;
+    [Parameter] public EventCallback<int> PreparationMinutesChanged { get; set; }
+    
+    [Parameter] public bool LimitCooking { get; set; }
+    [Parameter] public EventCallback<bool> LimitCookingChanged { get; set; }
+    [Parameter] public int CookingMinutes { get; set; } = 30;
+    [Parameter] public EventCallback<int> CookingMinutesChanged { get; set; }
+}
+

@@ -1,0 +1,495 @@
+/* Variables CSS - Thème Cuisine */
+:root {
+    /* Couleurs principales */
+    --color-primary: #E85A4F;
+    --color-primary-hover: #D94A3F;
+    --color-secondary: #52B788;
+    --color-secondary-hover: #429A6F;
+    --color-accent: #F4A261;
+    --color-accent-hover: #E4914F;
+    
+    /* Arrière-plans */
+    --color-bg-main: #FFF8F0;
+    --color-bg-surface: #FFFEFB;
+    --color-bg-muted: #F5F5F0;
+    --color-bg-card: #FFFFFF;
+    
+    /* Texte */
+    --color-text-main: #2D2D2D;
+    --color-text-secondary: #5C5C5C;
+    --color-text-muted: #8B8B83;
+    
+    /* Bordures */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
+    
+    /* Ombres douces */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-card: 0 2px 8px rgba(232, 90, 79, 0.08);
+    
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+    --transition-slow: 0.4s ease;
+}
+
+/* Reset et base */
+
+html, body {
+    font-family: "Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", sans-serif !important;
+    background: var(--color-bg-main);
+    color: var(--color-text-main);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Blazor Loader - Écran de chargement personnalisé */
+.blazor-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--color-bg-main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loader-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    animation: fadeIn 0.5s ease-in;
+}
+
+.cooking-loader {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spoon, .fork {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 4px solid transparent;
+    border-top-color: var(--color-primary);
+    border-right-color: var(--color-secondary);
+    animation: spin 1.2s linear infinite;
+}
+
+.fork {
+    animation: spin 1.2s linear infinite reverse;
+    border-top-color: var(--color-accent);
+    border-right-color: var(--color-primary);
+    width: 40px;
+    height: 40px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.loader-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.loader-title {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+}
+
+.loader-subtitle {
+    font-size: 0.95rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.progress-bar-container {
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--color-bg-muted);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary), var(--color-accent));
+    background-size: 200% 100%;
+    border-radius: var(--radius-full);
+    width: 0%;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.progress-text {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    min-height: 1.25rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Masquer le loader une fois Blazor chargé */
+.loaded .blazor-loader {
+    display: none;
+}
+
+/* Typographie globale */
+body, .mud-typography-body1, .mud-typography-body2 {
+    font-family: "Inter", "system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", sans-serif !important;
+}
+
+/* Typographie */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--color-text-main);
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 0;
+}
+
+h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+h3 {
+    font-size: 1.75rem;
+}
+
+h4 {
+    font-size: 1.5rem;
+}
+
+.text-muted {
+    color: var(--color-text-secondary);
+}
+
+/* AppBar personnalisé */
+.mud-appbar {
+    background: linear-gradient(135deg, #FFFFFF 0%, #FFF8F0 100%) !important;
+    border-bottom: 1px solid rgba(232, 90, 79, 0.1);
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.mud-appbar .mud-typography-h6 {
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+}
+
+/* Drawer personnalisé - Ne pas modifier le layout */
+.mud-nav-menu .mud-nav-link {
+    border-radius: var(--radius-md);
+    margin: 0.35rem 0.5rem;
+    padding: 0.75rem 1rem;
+    transition: all var(--transition-normal);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.mud-nav-menu .mud-nav-link:hover {
+    background: linear-gradient(135deg, rgba(232, 90, 79, 0.08) 0%, rgba(244, 162, 97, 0.08) 100%) !important;
+    color: var(--color-primary) !important;
+    transform: translateX(4px);
+}
+
+.mud-nav-menu .mud-nav-link.mud-nav-link-active {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%) !important;
+    color: #FFFFFF !important;
+    box-shadow: var(--shadow-card);
+    font-weight: 600;
+}
+
+.mud-nav-menu .mud-nav-link .mud-icon-root {
+    margin-right: 0.75rem;
+}
+
+/* Cartes personnalisées */
+.mud-card {
+    background: var(--color-bg-card) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-md) !important;
+    border: 1px solid rgba(232, 90, 79, 0.08);
+    transition: all var(--transition-normal);
+    overflow: hidden;
+}
+
+.mud-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg) !important;
+    border-color: rgba(232, 90, 79, 0.15);
+}
+
+.mud-card-content {
+    padding: 1.5rem !important;
+}
+
+/* Boutons personnalisés */
+.mud-button-filled-primary {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%) !important;
+    border-radius: var(--radius-md) !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    padding: 0.75rem 1.5rem !important;
+    box-shadow: var(--shadow-card) !important;
+    transition: all var(--transition-normal) !important;
+}
+
+.mud-button-filled-primary:hover {
+    background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-accent-hover) 100%) !important;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.mud-button-text-primary {
+    color: var(--color-primary) !important;
+    font-weight: 600 !important;
+    text-transform: none !important;
+    border-radius: var(--radius-md) !important;
+}
+
+.mud-button-text-primary:hover {
+    background: rgba(232, 90, 79, 0.08) !important;
+}
+
+/* Inputs personnalisés */
+.mud-input-outlined {
+    border-radius: var(--radius-md) !important;
+}
+
+.mud-input-outlined .mud-input-root {
+    border-radius: var(--radius-md) !important;
+    background: var(--color-bg-surface) !important;
+    transition: all var(--transition-normal) !important;
+}
+
+.mud-input-outlined .mud-input-root:hover {
+    border-color: var(--color-primary) !important;
+}
+
+.mud-input-outlined.mud-input-focused .mud-input-root {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px rgba(232, 90, 79, 0.1) !important;
+}
+
+.mud-input-label {
+    font-weight: 500 !important;
+    color: var(--color-text-secondary) !important;
+}
+
+.mud-input-label-focused {
+    color: var(--color-primary) !important;
+}
+
+/* Chips/Tags personnalisés */
+.mud-chip {
+    border-radius: var(--radius-full) !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    padding: 0.5rem 1rem !important;
+    background: var(--color-bg-muted) !important;
+    color: var(--color-text-main) !important;
+    transition: all var(--transition-fast) !important;
+}
+
+.mud-chip:hover {
+    background: rgba(232, 90, 79, 0.1) !important;
+    color: var(--color-primary) !important;
+}
+
+/* Divider personnalisé */
+.mud-divider {
+    border-color: rgba(232, 90, 79, 0.1) !important;
+    margin: 1.5rem 0 !important;
+}
+
+/* Switches personnalisés */
+.mud-switch-checked .mud-switch-thumb {
+    background-color: var(--color-primary) !important;
+}
+
+.mud-switch-checked .mud-switch-track {
+    background-color: rgba(232, 90, 79, 0.5) !important;
+}
+
+/* Sliders personnalisés */
+.mud-slider .mud-slider-thumb {
+    background-color: var(--color-primary) !important;
+    border: 3px solid #FFFFFF !important;
+    box-shadow: var(--shadow-md) !important;
+}
+
+.mud-slider .mud-slider-track {
+    background-color: rgba(232, 90, 79, 0.3) !important;
+}
+
+.mud-slider .mud-slider-track-fill {
+    background-color: var(--color-primary) !important;
+}
+
+/* Select/Dropdown personnalisé */
+.mud-select .mud-input-root {
+    border-radius: var(--radius-md) !important;
+}
+
+/* Checkbox personnalisé */
+.mud-checkbox-checked .mud-icon-default {
+    color: var(--color-primary) !important;
+}
+
+/* Radio personnalisé */
+.mud-radio-checked .mud-icon-default {
+    color: var(--color-primary) !important;
+}
+
+/* DatePicker personnalisé */
+.mud-picker-toolbar {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%) !important;
+}
+
+.mud-picker-datepicker-toolbar-date-selected {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #FFFFFF !important;
+}
+
+/* Container principal - Ne pas interférer avec le layout MudBlazor */
+
+/* Sections */
+.section {
+    background: var(--color-bg-surface);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 2rem;
+    border: 1px solid rgba(232, 90, 79, 0.08);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mud-card,
+.mud-paper {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Scrollbar personnalisé */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-bg-muted);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(232, 90, 79, 0.3);
+    border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(232, 90, 79, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    h2 {
+        font-size: 1.75rem;
+    }
+    
+    .mud-card-content {
+        padding: 1.25rem !important;
+    }
+}
+
+/* Utilitaires */
+.text-gradient {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%) !important;
+}

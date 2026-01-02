@@ -1,0 +1,19 @@
+@using MudBlazor
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.h6" Class="mb-3">Apports nutritionnels</MudText>
+<MudNumericField T="int?" 
+               Value="@Value"
+               ValueChanged="@ValueChanged"
+               Label="Calories maximales par plat (kcal)"
+               HelperText="Optionnel : nombre de calories maximales souhaitées pour chaque plat"
+               Min="0"
+               Max="5000"
+               Variant="Variant.Outlined"
+               Class="mb-4" />
+
+@code {
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+}
+

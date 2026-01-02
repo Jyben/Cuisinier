@@ -1,0 +1,223 @@
+@page "/menu/{MenuId:int}"
+@using Cuisinier.App.Components
+@using Cuisinier.App.Services
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IMenuApi MenuApi
+@inject IShoppingListApi ShoppingListApi
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<PageTitle>Détails du menu</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_menu != null)
+{
+    var menuTitle = $"Menu - Semaine du {_menu.WeekStartDate:dd/MM/yyyy}";
+    <PageHeader Title="@menuTitle" />
+
+    <MudGrid>
+        @foreach (var recipe in _menu.Recipes)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <RecipeCard 
+                    Recipe="recipe" 
+                    ShowDetails="true"
+                    MenuValid="@_menuValid"
+                    IsGenerating="@IsGenerating(recipe.Id)" />
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudStack Row="true" Spacing="2" Class="mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => ViewShoppingList(_menu.Id)">Voir la liste de courses</MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public int MenuId { get; set; }
+
+    private MenuResponse? _menu;
+    private bool _loading = true;
+    private bool _menuValid = false;
+    private HubConnection? _hubConnection;
+    private Dictionary<int, bool> _recipesBeingGenerated = new();
+    private int? _lastConnectedMenuId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMenu();
+        // Connect to the hub only if recipes are being generated
+        if (_menuValid && HasRecipesBeingGenerated())
+        {
+            await InitializeSignalR();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // If MenuId changes, reload the menu and reconnect SignalR if necessary
+        if (_menu?.Id != MenuId)
+        {
+            await LoadMenu();
+            if (_menuValid && HasRecipesBeingGenerated())
+            {
+                await InitializeSignalR();
+            }
+        }
+    }
+
+    private bool HasRecipesBeingGenerated()
+    {
+        return _menu?.Recipes.Any(r => string.IsNullOrEmpty(r.DetailedRecipe)) == true;
+    }
+
+    private async Task InitializeSignalR()
+    {
+        // Close existing connection if it exists
+        if (_hubConnection is not null)
+        {
+            try
+            {
+                await _hubConnection.StopAsync();
+                await _hubConnection.DisposeAsync();
+            }
+            catch
+            {
+                // Ignore errors during shutdown
+            }
+            _hubConnection = null;
+        }
+
+        var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
+        var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
+        
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .Build();
+
+        _hubConnection.On<RecipeResponse>("RecipeDetailedGenerated", (recipe) =>
+        {
+            if (_menu != null)
+            {
+                var index = _menu.Recipes.FindIndex(r => r.Id == recipe.Id);
+                if (index >= 0)
+                {
+                    _menu.Recipes[index] = recipe;
+                    _recipesBeingGenerated[recipe.Id] = false;
+                    InvokeAsync(StateHasChanged);
+                }
+            }
+        });
+
+        _hubConnection.On<int>("RecipeGenerationError", (recipeId) =>
+        {
+            _recipesBeingGenerated[recipeId] = false;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await _hubConnection.StartAsync();
+            await _hubConnection.SendAsync("JoinMenuGroup", MenuId);
+            _lastConnectedMenuId = MenuId;
+        }
+        catch
+        {
+            Snackbar.Add($"Erreur de connexion SignalR. Veuillez réessayer.", Severity.Error);
+            _lastConnectedMenuId = null;
+        }
+    }
+
+    private bool IsGenerating(int recipeId)
+    {
+        // If the recipe is in the dictionary and marked as being generated
+        if (_recipesBeingGenerated.ContainsKey(recipeId))
+        {
+            return _recipesBeingGenerated[recipeId];
+        }
+        
+        // If the recipe has no DetailedRecipe and the menu is validated, display the skeleton
+        if (_menu != null && _menuValid)
+        {
+            var recipe = _menu.Recipes.FirstOrDefault(r => r.Id == recipeId);
+            return recipe != null && string.IsNullOrEmpty(recipe.DetailedRecipe);
+        }
+        
+        return false;
+    }
+
+    private async Task LoadMenu()
+    {
+        try
+        {
+            _loading = true;
+            _menu = await MenuApi.GetMenuAsync(MenuId);
+            
+            // Check if the menu has been validated (if a shopping list exists)
+            _menuValid = await VerifyMenuValid();
+            
+            // Mark recipes without DetailedRecipe as being generated
+            if (_menu != null && _menuValid)
+            {
+                foreach (var recipe in _menu.Recipes.Where(r => string.IsNullOrEmpty(r.DetailedRecipe)))
+                {
+                    _recipesBeingGenerated[recipe.Id] = true;
+                }
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger le menu. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task<bool> VerifyMenuValid()
+    {
+        try
+        {
+            await ShoppingListApi.GetShoppingListAsync(MenuId);
+            return true; // If the list exists, the menu is validated
+        }
+        catch
+        {
+            return false; // If error (probably 404), the menu is not yet validated
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+        {
+            try
+            {
+                await _hubConnection.StopAsync();
+            }
+            catch
+            {
+                // Ignore errors during shutdown
+            }
+            finally
+            {
+                await _hubConnection.DisposeAsync();
+            }
+        }
+    }
+
+    private void ViewShoppingList(int menuId)
+    {
+        Navigation.NavigateTo($"/shopping-list/{menuId}");
+    }
+}
+

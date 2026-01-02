@@ -1,0 +1,127 @@
+@using MudBlazor
+
+<div class="loading-container">
+    <div class="loading-content">
+        <div class="shapes-container">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+            <div class="shape shape-4"></div>
+        </div>
+        <MudText Typo="Typo.h6" Class="loading-text">@Title</MudText>
+        <MudText Typo="Typo.body2" Class="loading-subtext">@Subtitle</MudText>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Génération de votre menu en cours...";
+    [Parameter] public string Subtitle { get; set; } = "Cela peut prendre quelques instants";
+}
+
+<style>
+    .loading-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 400px;
+        padding: 3rem;
+    }
+
+    .loading-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2rem;
+    }
+
+    .shapes-container {
+        position: relative;
+        width: 120px;
+        height: 120px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .shape {
+        position: absolute;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--mud-palette-primary, #1976d2) 0%, var(--mud-palette-secondary, #dc004e) 100%);
+        opacity: 0.8;
+        animation: stack-animation 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .shape-1 {
+        width: 80px;
+        height: 80px;
+        animation-delay: 0s;
+        z-index: 4;
+    }
+
+    .shape-2 {
+        width: 65px;
+        height: 65px;
+        animation-delay: 0.15s;
+        z-index: 3;
+        background: linear-gradient(135deg, var(--mud-palette-secondary, #dc004e) 0%, var(--mud-palette-tertiary, #9c27b0) 100%);
+    }
+
+    .shape-3 {
+        width: 50px;
+        height: 50px;
+        animation-delay: 0.3s;
+        z-index: 2;
+        background: linear-gradient(135deg, var(--mud-palette-tertiary, #9c27b0) 0%, var(--mud-palette-primary, #1976d2) 100%);
+    }
+
+    .shape-4 {
+        width: 35px;
+        height: 35px;
+        animation-delay: 0.45s;
+        z-index: 1;
+        background: linear-gradient(135deg, var(--mud-palette-primary, #1976d2) 0%, var(--mud-palette-success, #4caf50) 100%);
+    }
+
+    @@keyframes stack-animation {
+        0% {
+            transform: translateY(0) scale(1) rotate(0deg);
+            opacity: 0.7;
+        }
+        20% {
+            transform: translateY(-25px) scale(1.15) rotate(5deg);
+            opacity: 1;
+        }
+        40% {
+            transform: translateY(-15px) scale(1.08) rotate(-3deg);
+            opacity: 0.9;
+        }
+        60% {
+            transform: translateY(-20px) scale(1.12) rotate(2deg);
+            opacity: 0.95;
+        }
+        80% {
+            transform: translateY(-10px) scale(1.05) rotate(-1deg);
+            opacity: 0.85;
+        }
+        100% {
+            transform: translateY(0) scale(1) rotate(0deg);
+            opacity: 0.7;
+        }
+    }
+
+    .loading-text {
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        text-align: center;
+        margin: 0;
+    }
+
+    .loading-subtext {
+        color: var(--mud-palette-text-secondary);
+        text-align: center;
+        margin: 0;
+        opacity: 0.8;
+    }
+</style>
+

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cuisinier.App</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="Cuisinier.App.styles.css" rel="stylesheet" />
+    <script type="importmap"></script>
+</head>
+
+<body>
+    <div id="app"></div>
+    
+    <div id="blazor-loader" class="blazor-loader">
+        <div class="loader-container">
+            <div class="cooking-loader">
+                <div class="spoon"></div>
+                <div class="fork"></div>
+            </div>
+            <div class="loader-text">
+                <span class="loader-title">Cuisinier</span>
+                <span class="loader-subtitle">Chargement en cours...</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="progress-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script>
+        // Gestionnaire de chargement Blazor personnalisé
+        (function() {
+            const progressBar = document.querySelector('.progress-fill');
+            const progressText = document.querySelector('.progress-text');
+            const loader = document.getElementById('blazor-loader');
+            const app = document.getElementById('app');
+            let currentProgress = 0;
+            let progressInterval = null;
+            let isHidden = false;
+            
+            // Fonction pour mettre à jour la progression
+            function updateProgress(percentage, text) {
+                if (progressBar) {
+                    progressBar.style.width = percentage + '%';
+                }
+                if (progressText) {
+                    progressText.textContent = text || percentage + '%';
+                }
+            }
+            
+            // Fonction pour masquer le loader
+            function hideLoader() {
+                if (isHidden || !loader) return;
+                isHidden = true;
+                
+                updateProgress(100, '100%');
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
+                
+                setTimeout(() => {
+                    if (loader) {
+                        loader.style.opacity = '0';
+                        loader.style.transition = 'opacity 0.5s ease-out';
+                        setTimeout(() => {
+                            if (loader) {
+                                loader.style.display = 'none';
+                            }
+                        }, 500);
+                    }
+                }, 300);
+            }
+            
+            // Observer les changements dans #app pour détecter quand Blazor a chargé
+            const appObserver = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.addedNodes.length > 0) {
+                        // Blazor a commencé à ajouter du contenu
+                        const hasBlazorContent = app && app.children.length > 0 && 
+                            (app.querySelector('*') !== null);
+                        if (hasBlazorContent && !isHidden) {
+                            // Attendre un peu pour s'assurer que tout est chargé
+                            setTimeout(hideLoader, 800);
+                        }
+                    }
+                });
+            });
+            
+            if (app) {
+                appObserver.observe(app, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+            
+            // Fallback: Animation de progression
+            progressInterval = setInterval(() => {
+                if (currentProgress < 95 && !isHidden) {
+                    currentProgress += Math.random() * 3 + 1;
+                    if (currentProgress > 95) currentProgress = 95;
+                    updateProgress(Math.round(currentProgress));
+                }
+            }, 150);
+            
+            // Sécurité: Masquer après un délai maximum
+            setTimeout(() => {
+                if (!isHidden) {
+                    hideLoader();
+                }
+            }, 30000);
+        })();
+    </script>
+</body>
+
+</html>

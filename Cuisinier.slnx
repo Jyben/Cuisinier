@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Cuisinier.Api/Cuisinier.Api.csproj" />
+  <Project Path="Cuisinier.App/Cuisinier.App.csproj" />
+  <Project Path="Cuisinier.AppHost/Cuisinier.AppHost.csproj" />
+  <Project Path="Cuisinier.Core/Cuisinier.Core.csproj" />
+  <Project Path="Cuisinier.DbMigrator/Cuisinier.DbMigrator.csproj" />
+  <Project Path="Cuisinier.Infrastructure/Cuisinier.Infrastructure.csproj" />
+</Solution>

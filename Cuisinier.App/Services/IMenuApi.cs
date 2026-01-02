@@ -1,0 +1,38 @@
+using Cuisinier.Core.DTOs;
+using Refit;
+
+namespace Cuisinier.App.Services;
+
+public interface IMenuApi
+{
+    [Post("/api/menu/generate")]
+    Task<MenuResponse> GenerateMenuAsync([Body] MenuGenerationRequest request);
+    
+    [Get("/api/menu/{id}")]
+    Task<MenuResponse> GetMenuAsync(int id);
+    
+    [Get("/api/menu/last-parameters")]
+    Task<MenuParameters?> GetLastParametersAsync();
+
+    [Post("/api/menu/parameters")]
+    Task SaveParametersAsync([Body] MenuParameters parameters);
+    
+    [Get("/api/menu")]
+    Task<List<MenuResponse>> GetAllMenusAsync();
+    
+    [Post("/api/menu/{menuId}/recipe/{recipeId}/replace")]
+    Task<RecipeResponse> ReplaceRecipeAsync(int menuId, int recipeId, [Body] RecipeReplacementRequest request);
+    
+    [Post("/api/menu/{menuId}/recipe/{recipeId}/ingredient/replace")]
+    Task<RecipeResponse> ReplaceIngredientAsync(int menuId, int recipeId, [Body] IngredientReplacementRequest request);
+    
+    [Delete("/api/menu/{menuId}/recipe/{recipeId}")]
+    Task DeleteRecipeAsync(int menuId, int recipeId);
+    
+    [Delete("/api/menu/{menuId}")]
+    Task DeleteMenuAsync(int menuId);
+    
+    [Post("/api/menu/{menuId}/validate")]
+    Task<MenuResponse> ValidateMenuAsync(int menuId);
+}
+

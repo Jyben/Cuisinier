@@ -1,0 +1,49 @@
+@using MudBlazor
+
+<MudDivider Class="my-4" />
+<MudText Typo="Typo.h6" Class="mb-3">Aliments souhaités</MudText>
+<MudText Typo="Typo.body2" Class="mb-3">Aliments que vous aimeriez voir apparaître dans une ou plusieurs recettes</MudText>
+
+@for (int i = 0; i < Items.Count; i++)
+{
+    var index = i;
+    var item = Items[index];
+    <MudGrid Class="mb-2">
+        <MudItem xs="10" sm="11">
+            <MudTextField Value="@item.Food" 
+                         ValueChanged="@((string value) => {
+                             item.Food = value;
+                             OnChange.InvokeAsync();
+                         })"
+                         Label="Aliment"
+                         Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="2" sm="1" Class="d-flex align-center justify-end">
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                          Color="Color.Error" 
+                          Size="Size.Small"
+                          OnClick="@(() => OnRemove.InvokeAsync(index))" />
+        </MudItem>
+    </MudGrid>
+}
+
+<MudButton Variant="Variant.Text" 
+          StartIcon="@Icons.Material.Filled.Add" 
+          OnClick="OnAdd"
+          FullWidth="true"
+          Class="mb-4">
+    Ajouter un aliment souhaité
+</MudButton>
+
+@code {
+    public class DesiredFoodItem
+    {
+        public string Food { get; set; } = "";
+    }
+
+    [Parameter] public List<DesiredFoodItem> Items { get; set; } = new();
+    [Parameter] public EventCallback<int> OnRemove { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnChange { get; set; }
+}
+

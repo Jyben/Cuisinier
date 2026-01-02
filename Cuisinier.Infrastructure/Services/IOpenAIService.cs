@@ -1,0 +1,13 @@
+using Cuisinier.Core.DTOs;
+
+namespace Cuisinier.Infrastructure.Services;
+
+public interface IOpenAIService
+{
+    Task<MenuResponse> GenerateMenuAsync(MenuParameters parameters);
+    Task<string> GenerateDetailedRecipeAsync(string recipeTitle, List<IngredientResponse> ingredients, string shortDescription);
+    Task<string> GenerateDishImageAsync(string dishTitle, string description);
+    Task<RecipeResponse> ReplaceRecipeAsync(MenuParameters parameters, RecipeResponse recipeToReplace);
+    Task<ShoppingListResponse> GenerateShoppingListAsync(List<RecipeResponse> recipes);
+}
+

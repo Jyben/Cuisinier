@@ -1,0 +1,334 @@
+@page "/shopping-list/{MenuId:int}"
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IShoppingListApi ShoppingListApi
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Liste de courses</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+<div class="liste-course-container">
+    <PageHeader Title="Liste de courses" />
+
+    @* Formulaire d'ajout d'élément *@
+    <MudCard Elevation="1" Class="mb-3 add-item-card">
+        <MudCardContent Class="pa-3">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Ajouter un élément</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudTextField Value="@_nouvelItem.Name" 
+                                  ValueChanged="@((string value) => _nouvelItem.Name = value)"
+                                  Label="Nom de l'ingrédient" 
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Clearable="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTextField Value="@_nouvelItem.Quantity" 
+                                  ValueChanged="@((string value) => _nouvelItem.Quantity = value)"
+                                  Label="Quantité" 
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Clearable="true" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudSelect Value="@_nouvelItem.Category" 
+                               ValueChanged="@((string value) => _nouvelItem.Category = value)"
+                               Label="Catégorie" 
+                               Variant="Variant.Outlined"
+                               Dense="true"
+                               T="string">
+                        @foreach (var categorie in _categories)
+                        {
+                            <MudSelectItem Value="@categorie">@categorie</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2">
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               FullWidth="true"
+                               OnClick="AjouterItem"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               Disabled="@(!CanAddItem)"
+                               Class="mt-4">
+                        Ajouter
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    @if (_listeCourse != null && _listeCourse.Items.Any())
+    {
+        @foreach (var groupe in _listeCourse.Items.GroupBy(i => i.Category).OrderBy(g => g.Key))
+        {
+            <MudCard Elevation="1" Class="mb-2 category-card">
+                <MudCardContent Class="pa-3">
+                    <div class="category-header">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@GetCategoryIcon(groupe.Key)" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1" Class="mb-0 category-title">@groupe.Key</MudText>
+                        </MudStack>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudList T="string" Class="py-0">
+                        @foreach (var itemTuple in groupe.Select((item, idx) => (item, idx)))
+                        {
+                            var item = itemTuple.item;
+                            var index = itemTuple.idx;
+                            <MudListItem T="string" Class="list-item">
+                                <div class="list-item-content">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+                                        <MudText Typo="Typo.body2" Class="item-text">@item.Name <span class="item-quantity">@item.Quantity</span></MudText>
+                                        <MudIconButton 
+                                            Icon="@Icons.Material.Filled.Delete" 
+                                            Color="Color.Error" 
+                                            Size="Size.Small" 
+                                            Variant="Variant.Text"
+                                            OnClick="() => SupprimerItem(item.Id)"
+                                            Class="delete-button" />
+                                    </MudStack>
+                                </div>
+                            </MudListItem>
+                            @if (index < groupe.Count() - 1)
+                            {
+                                <MudDivider Class="my-0" Style="margin-left: 0; margin-right: 0;" />
+                            }
+                        }
+                    </MudList>
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+    else if (_listeCourse != null && !_listeCourse.Items.Any())
+    {
+        <MudCard Elevation="1">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="padding: 3rem;">
+                    <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                    <MudText Typo="Typo.h6" Class="text-center">La liste de courses est vide</MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+</div>
+
+@code {
+    [Parameter] public int MenuId { get; set; }
+
+    private ShoppingListResponse? _listeCourse;
+    private bool _loading = true;
+    private AddItemRequest _nouvelItem = new();
+    private readonly List<string> _categories = new()
+    {
+        "Épicerie",
+        "Légumes",
+        "Fruits",
+        "Viandes",
+        "Poissons",
+        "Volaille",
+        "Produits laitiers",
+        "Fromages",
+        "Œufs",
+        "Boulangerie",
+        "Pâtes et riz",
+        "Céréales",
+        "Boissons",
+        "Eau",
+        "Boissons alcoolisées",
+        "Condiments et sauces",
+        "Herbes et épices",
+        "Huiles et vinaigres",
+        "Noix et graines",
+        "Surgelés",
+        "Conserves",
+        "Desserts",
+        "Chocolat et confiserie",
+        "Produits bio",
+        "Hygiène"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _nouvelItem.Category = _categories.FirstOrDefault() ?? string.Empty;
+        await LoadShoppingList();
+    }
+
+    private async Task LoadShoppingList()
+    {
+        try
+        {
+            _loading = true;
+            _listeCourse = await ShoppingListApi.GetShoppingListAsync(MenuId);
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger la liste de courses. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SupprimerItem(int itemId)
+    {
+        try
+        {
+            await ShoppingListApi.DeleteItemAsync(MenuId, itemId);
+            await LoadShoppingList();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de supprimer l'élément. Veuillez réessayer.", Severity.Error);
+        }
+    }
+
+    private async Task AjouterItem()
+    {
+        if (!CanAddItem)
+            return;
+
+        try
+        {
+            await ShoppingListApi.AddItemAsync(MenuId, _nouvelItem);
+            _nouvelItem = new AddItemRequest { Category = _categories.FirstOrDefault() ?? string.Empty };
+            await LoadShoppingList();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible d'ajouter l'élément. Veuillez réessayer.", Severity.Error);
+        }
+    }
+
+    private bool CanAddItem => 
+        !string.IsNullOrWhiteSpace(_nouvelItem.Name) && 
+        !string.IsNullOrWhiteSpace(_nouvelItem.Quantity) && 
+        !string.IsNullOrWhiteSpace(_nouvelItem.Category);
+
+    private string GetCategoryIcon(string category)
+    {
+        return category.ToLower() switch
+        {
+            // Meats and proteins
+            "viandes" or "viande" => Icons.Material.Filled.SetMeal,
+            "volaille" => Icons.Material.Filled.SetMeal,
+            "poissons" or "poisson" => Icons.Material.Filled.SetMeal,
+            
+            // Fruits and vegetables
+            "légumes" or "legumes" or "légume" or "legume" => Icons.Material.Filled.Grass,
+            "fruits" or "fruit" => Icons.Material.Filled.LocalGroceryStore,
+            "champignons" or "champignon" => Icons.Material.Filled.Grass,
+            
+            // Produits laitiers
+            "produits laitiers" or "laitier" or "laitiers" => Icons.Material.Filled.Agriculture,
+            "fromages" or "fromage" => Icons.Material.Filled.Agriculture,
+            "œufs" or "oeufs" or "œuf" or "oeuf" => Icons.Material.Filled.Agriculture,
+            
+            // Pain et boulangerie
+            "boulangerie" => Icons.Material.Filled.BreakfastDining,
+            
+            // Cereals and starches
+            "pâtes et riz" or "pates et riz" or "pâtes" or "pates" => Icons.Material.Filled.RestaurantMenu,
+            "céréales" or "cereales" or "céréale" or "cereale" => Icons.Material.Filled.BreakfastDining,
+            
+            // Boissons
+            "boissons" or "boisson" => Icons.Material.Filled.LocalDrink,
+            "eau" => Icons.Material.Filled.WaterDrop,
+            "boissons alcoolisées" or "alcool" => Icons.Material.Filled.LocalBar,
+            
+            // Condiments et assaisonnements
+            "condiments et sauces" or "condiments" or "sauces" => Icons.Material.Filled.Restaurant,
+            "herbes et épices" or "herbes" or "épices" or "epices" => Icons.Material.Filled.Spa,
+            "huiles et vinaigres" or "huiles" or "vinaigres" => Icons.Material.Filled.WaterDrop,
+            
+            // Noix et graines
+            "noix et graines" or "noix" or "graines" => Icons.Material.Filled.EmojiNature,
+            
+            // Processed products
+            "surgelés" or "surgeles" or "surgelé" or "surgelé" => Icons.Material.Filled.AcUnit,
+            "conserves" or "conserve" => Icons.Material.Filled.Inventory,
+            
+            // Desserts et sucreries
+            "desserts" or "dessert" => Icons.Material.Filled.Cake,
+            "chocolat et confiserie" or "chocolat" or "confiserie" => Icons.Material.Filled.Cake,
+            
+            // Autres
+            "épicerie" or "epicerie" => Icons.Material.Filled.Kitchen,
+            "produits bio" or "bio" => Icons.Material.Filled.Grass,
+            "hygiène" or "hygiene" => Icons.Material.Filled.LocalPharmacy,
+            
+            // Default
+            _ => Icons.Material.Filled.ShoppingCart
+        };
+    }
+}
+
+<style>
+    .liste-course-container {
+        max-width: 900px;
+    }
+
+    .category-card {
+        border-radius: var(--mud-default-borderradius, 8px);
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .category-card:hover {
+        box-shadow: var(--mud-elevation-4, 0 4px 8px rgba(0,0,0,0.1)) !important;
+    }
+
+    .category-header {
+        margin-bottom: 0.25rem;
+    }
+
+    .category-title {
+        font-weight: 600;
+    }
+
+    .list-item {
+        padding: 0.25rem 0 !important;
+        min-height: auto !important;
+    }
+
+    .list-item-content {
+        width: 100%;
+        padding: 0.125rem 0;
+    }
+
+    .item-text {
+        font-weight: 400;
+        color: var(--mud-palette-text-primary);
+    }
+
+    .item-quantity {
+        color: var(--mud-palette-text-secondary);
+        font-weight: 400;
+        margin-left: 0.5rem;
+    }
+
+    .delete-button {
+        margin-left: 0.5rem;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+        padding: 0.25rem !important;
+    }
+
+    .delete-button:hover {
+        opacity: 1;
+    }
+
+    .add-item-card {
+        background-color: var(--mud-palette-surface, #fff);
+        border: 1px solid var(--mud-palette-lines-default, rgba(0,0,0,0.12));
+    }
+</style>
+

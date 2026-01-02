@@ -1,0 +1,180 @@
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@using Markdig
+@using System.Linq
+
+<MudDialog>
+    <DialogContent>
+        @if (!string.IsNullOrEmpty(Recipe.ImageUrl))
+        {
+            <MudImage Src="@Recipe.ImageUrl" Alt="@Recipe.Title" Height="200" ObjectFit="ObjectFit.Cover" Class="mb-4" Style="border-radius: 8px;" />
+        }
+        
+        <MudText Typo="Typo.h5" Class="mb-3" Style="font-weight: 600;">@Recipe.Title</MudText>
+        
+        @if (!string.IsNullOrEmpty(Recipe.Description))
+        {
+            <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(0,0,0,0.7);">@Recipe.Description</MudText>
+        }
+
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudTooltip Text="Nombre de personnes">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                    @Recipe.Servings personnes
+                </MudChip>
+            </MudTooltip>
+            @if (Recipe.PreparationTime.HasValue)
+            {
+                <MudTooltip Text="Temps de préparation">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                        @((int)Recipe.PreparationTime.Value.TotalMinutes) min prép.
+                    </MudChip>
+                </MudTooltip>
+            }
+            @if (Recipe.CookingTime.HasValue)
+            {
+                <MudTooltip Text="Temps de cuisson">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="mr-1" />
+                        @((int)Recipe.CookingTime.Value.TotalMinutes) min cuisson
+                    </MudChip>
+                </MudTooltip>
+            }
+            @if (Recipe.Kcal.HasValue)
+            {
+                <MudTooltip Text="Calories">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Small" Class="mr-1" />
+                        @Recipe.Kcal.Value kcal
+                    </MudChip>
+                </MudTooltip>
+            }
+        </MudStack>
+
+        @if (Recipe.Ingredients != null && Recipe.Ingredients.Any())
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.ListAlt" Size="Size.Small" Class="mr-2" />
+                Ingrédients
+            </MudText>
+            <MudList T="string" Dense="true" Class="mb-4">
+                @foreach (var ingredient in Recipe.Ingredients)
+                {
+                    <MudListItem T="string">
+                        <MudText Typo="Typo.body2">
+                            <span style="font-weight: 500;">@ingredient.Name</span>
+                            <span style="color: rgba(0,0,0,0.7); margin-left: 0.5rem;">@ingredient.Quantity</span>
+                        </MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+
+        @if (!string.IsNullOrEmpty(Recipe.DetailedRecipe))
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.Receipt" Size="Size.Small" Class="mr-2" />
+                Recette détaillée
+            </MudText>
+            <div class="recette-detaillee-content">
+                @((MarkupString)_detailedRecipeHtml)
+            </div>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [Parameter] public RecipeResponse Recipe { get; set; } = new();
+
+    private string _detailedRecipeHtml = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(Recipe.DetailedRecipe))
+        {
+            var pipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .UseEmphasisExtras()
+                .UseTaskLists()
+                .UseAutoLinks()
+                .Build();
+            
+            _detailedRecipeHtml = Markdown.ToHtml(Recipe.DetailedRecipe, pipeline);
+        }
+    }
+}
+
+<style>
+    .recette-detaillee-content {
+        line-height: 1.7;
+        color: rgba(0, 0, 0, 0.87);
+    }
+
+    .recette-detaillee-content h2,
+    .recette-detaillee-content h3,
+    .recette-detaillee-content h4 {
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        color: rgba(0, 0, 0, 0.87);
+    }
+
+    .recette-detaillee-content h2 {
+        font-size: 1.5rem;
+        border-bottom: 2px solid var(--mud-palette-primary);
+        padding-bottom: 0.5rem;
+    }
+
+    .recette-detaillee-content h3 {
+        font-size: 1.25rem;
+    }
+
+    .recette-detaillee-content h4 {
+        font-size: 1.1rem;
+    }
+
+    .recette-detaillee-content p {
+        margin-bottom: 1rem;
+    }
+
+    .recette-detaillee-content ul,
+    .recette-detaillee-content ol {
+        margin-bottom: 1rem;
+        padding-left: 2rem;
+    }
+
+    .recette-detaillee-content li {
+        margin-bottom: 0.5rem;
+    }
+
+    .recette-detaillee-content strong {
+        font-weight: 600;
+        color: rgba(0, 0, 0, 0.87);
+    }
+
+    .recette-detaillee-content em {
+        font-style: italic;
+    }
+
+    .recette-detaillee-content code {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+        font-family: 'Courier New', monospace;
+    }
+
+    .recette-detaillee-content blockquote {
+        border-left: 4px solid var(--mud-palette-primary);
+        padding-left: 1rem;
+        margin-left: 0;
+        margin-bottom: 1rem;
+        color: rgba(0, 0, 0, 0.7);
+        font-style: italic;
+    }
+</style>
+

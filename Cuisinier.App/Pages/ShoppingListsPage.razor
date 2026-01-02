@@ -1,0 +1,193 @@
+@page "/shopping-lists"
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IMenuApi MenuApi
+@inject IShoppingListApi ShoppingListApi
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Listes de courses</PageTitle>
+
+<PageHeader Title="Liste des courses" />
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_menus != null && _menus.Any())
+{
+    <MudCard Elevation="1" Class="listes-container">
+        <MudList T="string" Dense="false" Class="listes-list">
+            @foreach (var menu in _menus)
+            {
+                <MudListItem 
+                    T="string" 
+                    OnClick="() => ViewShoppingList(menu.Id)"
+                    Class="liste-item"
+                    Href="">
+                    <div class="liste-item-content">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex: 1; cursor: pointer;" @onclick="() => ViewShoppingList(menu.Id)">
+                                <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Medium" Color="Color.Primary" />
+                                <div>
+                                    <MudText Typo="Typo.subtitle1" Class="liste-item-title">Semaine du @menu.WeekStartDate.ToString("dd/MM/yyyy")</MudText>
+                                    <MudText Typo="Typo.caption" Class="liste-item-subtitle">@menu.Recipes.Count recette@(menu.Recipes.Count > 1 ? "s" : "")</MudText>
+                                </div>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton 
+                                        Icon="@Icons.Material.Filled.Delete" 
+                                        Color="Color.Error" 
+                                        Size="Size.Small" 
+                                        Variant="Variant.Text"
+                                        OnClick="@(async () => await SupprimerListeCourse(menu.Id))"
+                                        Class="delete-button" />
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Style="color: rgba(0,0,0,0.4);" />
+                            </MudStack>
+                        </MudStack>
+                    </div>
+                </MudListItem>
+                @if (menu != _menus.Last())
+                {
+                    <MudDivider Class="liste-divider" />
+                }
+            }
+        </MudList>
+    </MudCard>
+}
+else if (!_loading)
+{
+    <MudCard Elevation="1">
+        <MudCardContent>
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="padding: 3rem;">
+                <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                <MudText Typo="Typo.h6" Class="text-center">Aucune liste de courses disponible</MudText>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private List<MenuResponse>? _menus;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMenus();
+    }
+
+    private async Task LoadMenus()
+    {
+        try
+        {
+            _loading = true;
+            var menus = await MenuApi.GetAllMenusAsync();
+            _menus = menus?.OrderByDescending(m => m.CreationDate).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger les menus. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ViewShoppingList(int menuId)
+    {
+        Navigation.NavigateTo($"/shopping-list/{menuId}");
+    }
+
+    private async Task SupprimerListeCourse(int menuId)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer la liste de courses" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer cette liste de courses ? Le menu associé ne sera pas supprimé." },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await ShoppingListApi.DeleteShoppingListAsync(menuId);
+                Snackbar.Add("Liste de courses supprimée avec succès", Severity.Success);
+                await LoadMenus();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+
+<style>
+    .listes-container {
+        border-radius: var(--mud-default-borderradius, 8px);
+        overflow: hidden;
+    }
+
+    .listes-list {
+        padding: 0;
+    }
+
+    .liste-item {
+        padding: 0.75rem 1.25rem !important;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .liste-item:hover {
+        background-color: rgba(0, 0, 0, 0.04) !important;
+    }
+
+    .liste-item-content {
+        width: 100%;
+    }
+
+    .liste-item-title {
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        margin: 0;
+    }
+
+    .liste-item-subtitle {
+        color: var(--mud-palette-text-secondary);
+        margin: 0.25rem 0 0 0;
+        opacity: 0.8;
+    }
+
+    .liste-divider {
+        margin: 0 !important;
+    }
+
+    .delete-button {
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+    }
+
+    .delete-button:hover {
+        opacity: 1;
+    }
+</style>
+

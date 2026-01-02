@@ -1,0 +1,104 @@
+@using Cuisinier.App.Components.MenuParametersFormComponents
+@using Cuisinier.Core.DTOs
+@using Cuisinier.App.Components
+@using Cuisinier.App.Services
+@using MudBlazor
+@inject IMenuApi MenuApi
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@if (_isGenerating)
+{
+    <LoadingAnimation />
+}
+else
+{
+    <MudCard Class="menu-form-card">
+        <MudCardContent Class="menu-form-content">
+            <MudForm @ref="_form">
+                <!-- Date de début de semaine -->
+                <MudDatePicker 
+                    Date="@Parameters.WeekStartDate" 
+                    DateChanged="@((DateTime? date) => Parameters.WeekStartDate = date ?? GetNextMonday())" 
+                    MinDate="@DateTime.Today.AddYears(-1)"
+                    MaxDate="@DateTime.Today.AddYears(1)"
+                    Label="Date de début de semaine"
+                    HelperText="Date du lundi de la semaine pour laquelle vous souhaitez générer le menu"
+                    Class="mb-4" />
+
+                <!-- Nombre de plats par nombre de personnes -->
+                <NumberOfDishesSection 
+                    NumberOfDishesValues="_numberOfDishesValues"
+                    ServingsValues="_servingsValues"
+                    OnRemove="DeleteDishServings"
+                    OnAdd="AddDishServings"
+                    OnChange="StateHasChanged" />
+
+                <!-- Types de plats avec nombres optionnels -->
+                <DishTypesSection 
+                    TypeOptions="_dishTypeOptions"
+                    TypesValues="_dishTypesValues"
+                    NumberValues="_numberOfDishTypesValues"
+                    OnRemove="DeleteDishType"
+                    OnAdd="AddDishType"
+                    OnChange="StateHasChanged" />
+
+                <!-- Aliments à bannir -->
+                <BannedFoodsSection 
+                    BannedFoods="Parameters.BannedFoods"
+                    NewFood="@_newBannedFood"
+                    NewFoodChanged="@((string value) => _newBannedFood = value)"
+                    OnRemove="DeleteBannedFood"
+                    OnAdd="AddBannedFood" />
+
+                <!-- Aliments souhaités -->
+                <DesiredFoodsSection 
+                    Items="_desiredFoodItems"
+                    OnRemove="DeleteDesiredFood"
+                    OnAdd="AddDesiredFood"
+                    OnChange="StateHasChanged" />
+
+                <!-- Aliments de saison -->
+                <SeasonalFoodsSection 
+                    Value="@_seasonalFoodOption"
+                    ValueChanged="@((string value) => { _seasonalFoodOption = value; StateHasChanged(); })" />
+
+                <!-- Options pondérées -->
+                <WeightedOptionsSection 
+                    WeightedOptions="Parameters.WeightedOptions"
+                    OptionsWithIntensity="_optionsWithIntensity"
+                    BooleanOptions="_booleanOptions"
+                    OnChange="StateHasChanged" />
+
+                <!-- Temps de préparation et cuisson -->
+                <TimeConstraintsSection 
+                    LimitPreparation="_limitPreparationTime"
+                    LimitPreparationChanged="@((bool value) => _limitPreparationTime = value)"
+                    PreparationMinutes="_preparationTimeMinutes"
+                    PreparationMinutesChanged="@((int value) => _preparationTimeMinutes = value)"
+                    LimitCooking="_limitCookingTime"
+                    LimitCookingChanged="@((bool value) => _limitCookingTime = value)"
+                    CookingMinutes="_cookingTimeMinutes"
+                    CookingMinutesChanged="@((int value) => _cookingTimeMinutes = value)" />
+
+                <!-- Nombre de kcal par plat -->
+                <NutritionSection 
+                    Value="Parameters.TotalKcalPerDish"
+                    ValueChanged="@((int? value) => Parameters.TotalKcalPerDish = value)" />
+
+                <!-- Bouton de génération -->
+                <MudDivider Class="my-4" />
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary" 
+                          Size="Size.Large"
+                          OnClick="GenerateMenu" 
+                          FullWidth="true"
+                          StartIcon="@Icons.Material.Filled.Restaurant"
+                          Disabled="@_isGenerating"
+                          Class="mt-4">
+                    Générer le menu
+                </MudButton>
+            </MudForm>
+        </MudCardContent>
+    </MudCard>
+}

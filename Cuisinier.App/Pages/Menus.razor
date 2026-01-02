@@ -1,0 +1,199 @@
+@page "/menus"
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IMenuApi MenuApi
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Menus</PageTitle>
+
+<PageHeader Title="Liste des menus" />
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_menus != null && _menus.Any())
+{
+    <MudCard Elevation="1" Class="menus-container">
+        <MudList T="string" Dense="false" Class="menus-list">
+            @foreach (var menu in _menus)
+            {
+                <MudListItem 
+                    T="string" 
+                    OnClick="() => VoirMenu(menu.Id)"
+                    Class="menu-item"
+                    Href="">
+                    <div class="menu-item-content">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Style="width: 100%;">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex: 1; cursor: pointer;" @onclick="() => VoirMenu(menu.Id)">
+                                <MudIcon Icon="@Icons.Material.Filled.Restaurant" Size="Size.Medium" Color="Color.Primary" />
+                                <div>
+                                    <MudText Typo="Typo.subtitle1" Class="menu-item-title">Semaine du @menu.WeekStartDate.ToString("dd/MM/yyyy")</MudText>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="menu-item-subtitle">
+                                        <MudText Typo="Typo.caption">@menu.Recipes.Count recette@(menu.Recipes.Count > 1 ? "s" : "")</MudText>
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.6;">•</MudText>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" Style="opacity: 0.6; width: 14px; height: 14px;" />
+                                            <MudText Typo="Typo.caption">@menu.CreationDate.ToString("dd/MM/yyyy")</MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </div>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton 
+                                        Icon="@Icons.Material.Filled.Delete" 
+                                        Color="Color.Error" 
+                                        Size="Size.Small" 
+                                        Variant="Variant.Text"
+                                        OnClick="@(async () => await SupprimerMenu(menu.Id))"
+                                        Class="delete-button" />
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Style="color: rgba(0,0,0,0.4);" />
+                            </MudStack>
+                        </MudStack>
+                    </div>
+                </MudListItem>
+                @if (menu != _menus.Last())
+                {
+                    <MudDivider Class="menu-divider" />
+                }
+            }
+        </MudList>
+    </MudCard>
+}
+else if (!_loading)
+{
+    <MudCard Elevation="1">
+        <MudCardContent>
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="padding: 3rem;">
+                <MudIcon Icon="@Icons.Material.Filled.Restaurant" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                <MudText Typo="Typo.h6" Class="text-center">Aucun menu disponible</MudText>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private List<MenuResponse>? _menus;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMenus();
+    }
+
+    private async Task LoadMenus()
+    {
+        try
+        {
+            _loading = true;
+            var menus = await MenuApi.GetAllMenusAsync();
+            _menus = menus?.OrderByDescending(m => m.CreationDate).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger les menus. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void VoirMenu(int menuId)
+    {
+        Navigation.NavigateTo($"/menu/{menuId}");
+    }
+
+    private async Task SupprimerMenu(int menuId)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer le menu" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer ce menu ? La liste de courses associée sera également supprimée." },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await MenuApi.DeleteMenuAsync(menuId);
+                Snackbar.Add("Menu supprimé avec succès", Severity.Success);
+                await LoadMenus();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+
+<style>
+    .menus-container {
+        border-radius: var(--mud-default-borderradius, 8px);
+        overflow: hidden;
+    }
+
+    .menus-list {
+        padding: 0;
+    }
+
+    .menu-item {
+        padding: 0.75rem 1.25rem !important;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .menu-item:hover {
+        background-color: rgba(0, 0, 0, 0.04) !important;
+    }
+
+    .menu-item-content {
+        width: 100%;
+    }
+
+    .menu-item-title {
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        margin: 0;
+    }
+
+    .menu-item-subtitle {
+        color: var(--mud-palette-text-secondary);
+        margin: 0.25rem 0 0 0;
+        opacity: 0.8;
+    }
+
+    .menu-divider {
+        margin: 0 !important;
+    }
+
+    .delete-button {
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+    }
+
+    .delete-button:hover {
+        opacity: 1;
+    }
+</style>
+
