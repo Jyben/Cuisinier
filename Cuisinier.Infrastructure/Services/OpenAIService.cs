@@ -31,66 +31,135 @@ public class OpenAIService : IOpenAIService
     {
         try
         {
-            var prompt = BuildMenuPrompt(parameters);
-            
-            var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
-            
-            _logger.LogInformation("Menu generation - System prompt: {SystemMessage}", systemMessage);
-            _logger.LogInformation("Menu generation - User prompt: {Prompt}", prompt);
-            
-            var chatMessages = new ChatMessage[]
+            var totalDishes = parameters.NumberOfDishes.Any() 
+                ? parameters.NumberOfDishes.Sum(item => item.NumberOfDishes) 
+                : 0;
+
+            if (totalDishes == 0)
             {
-                new SystemChatMessage(systemMessage),
-                new UserChatMessage(prompt)
-            };
+                throw new InvalidOperationException("No dishes requested");
+            }
 
-            var options = new ChatCompletionOptions
+            const int maxDishesPerBatch = 8;
+            var allRecipes = new List<RecipeResponse>();
+
+            // Si le nombre total est <= 8, on fait un seul appel
+            if (totalDishes <= maxDishesPerBatch)
             {
-                Temperature = 0.7f
-            };
+                var menuResponse = await GenerateMenuBatchAsync(parameters, totalDishes, new List<string>());
+                return menuResponse;
+            }
 
-            var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
-            var completionValue = completion.Value;
-            
-            // Access response content
-            var jsonResponse = completionValue.Content[0].Text ?? throw new InvalidOperationException("Empty OpenAI response");
-            
-            // Clean JSON response (remove markdown code blocks if present)
-            jsonResponse = CleanJsonResponse(jsonResponse);
-            
-            _logger.LogInformation("OpenAI response received: {Length} characters", jsonResponse.Length);
-            
-            var menuData = JsonSerializer.Deserialize<MenuResponseDto>(jsonResponse, _jsonOptions)
-                ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
+            // Sinon, on découpe en plusieurs appels
+            var remainingDishes = totalDishes;
+            var generatedTitles = new List<string>();
 
-            var menuResponse = new MenuResponse
+            while (remainingDishes > 0)
+            {
+                var dishesInThisBatch = Math.Min(remainingDishes, maxDishesPerBatch);
+                
+                _logger.LogInformation(
+                    "Generating batch: {DishesInBatch} dishes (remaining: {Remaining}, already generated: {AlreadyGenerated})",
+                    dishesInThisBatch,
+                    remainingDishes,
+                    generatedTitles.Count);
+
+                var batchResponse = await GenerateMenuBatchAsync(parameters, dishesInThisBatch, generatedTitles);
+                
+                allRecipes.AddRange(batchResponse.Recipes);
+                
+                // Ajouter les titres générés pour éviter les doublons
+                generatedTitles.AddRange(batchResponse.Recipes.Select(r => r.Title));
+                
+                remainingDishes -= batchResponse.Recipes.Count;
+                
+                _logger.LogInformation(
+                    "Batch completed: {Generated} dishes generated, {Remaining} remaining",
+                    batchResponse.Recipes.Count,
+                    remainingDishes);
+            }
+
+            // Vérifier qu'on a bien le nombre attendu
+            if (allRecipes.Count != totalDishes)
+            {
+                _logger.LogWarning(
+                    "Expected {Expected} dishes but generated {Actual}",
+                    totalDishes,
+                    allRecipes.Count);
+            }
+
+            return new MenuResponse
             {
                 WeekStartDate = parameters.WeekStartDate,
                 CreationDate = DateTime.UtcNow,
-                Recipes = menuData.Recettes.Select(r => new RecipeResponse
-                {
-                    Title = r.Titre,
-                    Description = r.Description,
-                    PreparationTime = ParseTimeSpan(r.TempsPreparation),
-                    CookingTime = ParseTimeSpan(r.TempsCuisson),
-                    Kcal = r.Kcal,
-                    Servings = r.Personnes,
-                    Ingredients = r.Ingredients.Select(i => new IngredientResponse
-                    {
-                        Name = i.Nom,
-                        Quantity = i.Quantite ?? "",
-                        Category = i.Categorie ?? ""
-                    }).ToList()
-                }).ToList()
+                Recipes = allRecipes
             };
-
-            return menuResponse;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during menu generation");
             throw;
         }
+    }
+
+    private async Task<MenuResponse> GenerateMenuBatchAsync(
+        MenuParameters parameters, 
+        int dishesToGenerate, 
+        List<string> alreadyGeneratedTitles)
+    {
+        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, alreadyGeneratedTitles);
+        
+        var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
+        
+        _logger.LogInformation("Menu batch generation - System prompt: {SystemMessage}", systemMessage);
+        _logger.LogInformation("Menu batch generation - User prompt: {Prompt}", prompt);
+        
+        var chatMessages = new ChatMessage[]
+        {
+            new SystemChatMessage(systemMessage),
+            new UserChatMessage(prompt)
+        };
+
+        var options = new ChatCompletionOptions
+        {
+            Temperature = 0.7f
+        };
+
+        var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
+        var completionValue = completion.Value;
+        
+        var jsonResponse = completionValue.Content[0].Text 
+            ?? throw new InvalidOperationException("Empty OpenAI response");
+        
+        jsonResponse = CleanJsonResponse(jsonResponse);
+        
+        _logger.LogInformation("OpenAI batch response received: {Length} characters", jsonResponse.Length);
+        
+        var menuData = JsonSerializer.Deserialize<MenuResponseDto>(jsonResponse, _jsonOptions)
+            ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
+
+        var menuResponse = new MenuResponse
+        {
+            WeekStartDate = parameters.WeekStartDate,
+            CreationDate = DateTime.UtcNow,
+            Recipes = menuData.Recettes.Select(r => new RecipeResponse
+            {
+                Title = r.Titre,
+                Description = r.Description,
+                PreparationTime = ParseTimeSpan(r.TempsPreparation),
+                CookingTime = ParseTimeSpan(r.TempsCuisson),
+                Kcal = r.Kcal,
+                Servings = r.Personnes,
+                Ingredients = r.Ingredients.Select(i => new IngredientResponse
+                {
+                    Name = i.Nom,
+                    Quantity = i.Quantite ?? "",
+                    Category = i.Categorie ?? ""
+                }).ToList()
+            }).ToList()
+        };
+
+        return menuResponse;
     }
 
     public async Task<string> GenerateDetailedRecipeAsync(string recipeTitle, List<IngredientResponse> ingredients, string shortDescription)
@@ -283,13 +352,30 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         }
     }
 
-    private string BuildMenuPrompt(MenuParameters parameters)
+    private string BuildMenuPrompt(MenuParameters parameters, int dishesToGenerate, List<string> alreadyGeneratedTitles)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Génère un menu de la semaine avec les paramètres suivants:");
         sb.AppendLine($"Date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd}");
         
         var totalDishes = parameters.NumberOfDishes.Any() ? parameters.NumberOfDishes.Sum(item => item.NumberOfDishes) : 0;
+        
+        // Si c'est un batch, indiquer le nombre de plats pour ce batch
+        if (dishesToGenerate > 0)
+        {
+            sb.AppendLine($"\nIMPORTANT: Tu DOIS générer EXACTEMENT {dishesToGenerate} plat(s) dans ce batch.");
+        }
+        
+        // Si des plats ont déjà été générés, les lister pour éviter les doublons
+        if (alreadyGeneratedTitles.Any())
+        {
+            sb.AppendLine("\nPlats DÉJÀ générés (tu NE DOIS PAS les répéter, génère des plats DIFFÉRENTS):");
+            foreach (var title in alreadyGeneratedTitles)
+            {
+                sb.AppendLine($"- {title}");
+            }
+            sb.AppendLine("\nIMPORTANT: Génère des plats COMPLÈTEMENT DIFFÉRENTS de ceux listés ci-dessus. Ne répète aucun titre, aucune variante similaire.");
+        }
         
         if (parameters.NumberOfDishes.Any())
         {
@@ -298,7 +384,6 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             {
                 sb.AppendLine($"- {item.NumberOfDishes} plats pour {item.Servings} personne(s)");
             }
-            sb.AppendLine($"\nIMPORTANT: Tu DOIS générer EXACTEMENT {totalDishes} plat(s) au total dans le tableau 'recettes'. C'est une contrainte stricte et obligatoire.");
         }
         
         if (parameters.DishTypes.Any())
@@ -420,9 +505,9 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
   ]
 }");
         sb.AppendLine($"\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
-        if (totalDishes > 0)
+        if (dishesToGenerate > 0)
         {
-            sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
+            sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {dishesToGenerate} recette(s). C'est une contrainte stricte et non négociable.");
         }
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
