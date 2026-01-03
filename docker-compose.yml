@@ -1,25 +1,46 @@
-version: '3.8'
-
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: cuisinier-sqlserver
     environment:
-      - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=${SQLSERVER_SA_PASSWORD:-ChangeMe123!}
-      - MSSQL_PID=Express
-    ports:
-      - "1433:1433"
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: ${SQLSERVER_SA_PASSWORD}
+      MSSQL_PID: Express
     volumes:
       - cuisinier-db-data:/var/opt/mssql
     networks:
       - cuisinier-network
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${SQLSERVER_SA_PASSWORD:-ChangeMe123!} -Q "SELECT 1" || exit 1
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$SA_PASSWORD\" -C -Q \"SELECT 1\""
+        ]
       interval: 10s
-      timeout: 3s
-      retries: 10
+      timeout: 5s
+      retries: 3
       start_period: 30s
+    restart: unless-stopped
+
+  dbmigrator:
+    build:
+      context: .
+      dockerfile: Cuisinier.DbMigrator/Dockerfile
+    container_name: cuisinier-dbmigrator
+    environment:
+      ConnectionStrings__DefaultConnection: >
+        Server=sqlserver,1433;
+        Database=CuisinierDb;
+        User Id=sa;
+        Password=${SQLSERVER_SA_PASSWORD};
+        TrustServerCertificate=True;
+        Encrypt=True;
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - cuisinier-network
+    restart: "no"
 
   api:
     build:
@@ -27,10 +48,16 @@ services:
       dockerfile: Cuisinier.Api/Dockerfile
     container_name: cuisinier-api
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=CuisinierDb;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-ChangeMe123!};TrustServerCertificate=True;Encrypt=True;
-      - OpenAI__ApiKey=${OPENAI_API_KEY}
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: >
+        Server=sqlserver,1433;
+        Database=CuisinierDb;
+        User Id=sa;
+        Password=${SQLSERVER_SA_PASSWORD};
+        TrustServerCertificate=True;
+        Encrypt=True;
+      OpenAI__ApiKey: ${OPENAI_API_KEY}
     ports:
       - "8080:8080"
     depends_on:
@@ -42,36 +69,19 @@ services:
       - cuisinier-network
     restart: unless-stopped
 
-  app:
-    build:
-      context: .
-      dockerfile: Cuisinier.App/Dockerfile
-    container_name: cuisinier-app
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:80
-      - ApiBaseUrl=http://api:8080
-    ports:
-      - "80:80"
-    depends_on:
-      - api
-    networks:
-      - cuisinier-network
-    restart: unless-stopped
-
-  dbmigrator:
-    build:
-      context: .
-      dockerfile: Cuisinier.DbMigrator/Dockerfile
-    container_name: cuisinier-dbmigrator
-    environment:
-      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=CuisinierDb;User Id=sa;Password=${SQLSERVER_SA_PASSWORD:-ChangeMe123!};TrustServerCertificate=True;Encrypt=True;
-    depends_on:
-      sqlserver:
-        condition: service_healthy
-    networks:
-      - cuisinier-network
-    restart: "no"
+  front-builder:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: cuisinier-front-builder
+    working_dir: /src
+    volumes:
+      - .:/src
+      - /usr/share/nginx/html:/out
+    command: >
+      bash -c "
+      dotnet publish Cuisinier.App/Cuisinier.App.csproj -c Release -o /tmp/publish &&
+      rm -rf /out/* &&
+      cp -r /tmp/publish/wwwroot/* /out
+      "
 
 volumes:
   cuisinier-db-data:
@@ -79,4 +89,3 @@ volumes:
 networks:
   cuisinier-network:
     driver: bridge
-
