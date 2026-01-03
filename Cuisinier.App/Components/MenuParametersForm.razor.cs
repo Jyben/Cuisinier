@@ -290,6 +290,10 @@ namespace Cuisinier.App.Components
                 StateHasChanged(); // Force update to display animation
                 
                 var menu = await MenuApi.GenerateMenuAsync(request);
+                // Yield to ensure navigation happens in the correct synchronization context
+                // This fixes Edge browser compatibility issues where Navigation.NavigateTo
+                // can fail if called immediately after an await
+                await Task.Yield();
                 Navigation.NavigateTo($"/menu-generation/{menu.Id}");
             }
             catch
