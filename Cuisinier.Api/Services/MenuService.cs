@@ -377,6 +377,10 @@ public class MenuService : IMenuService
         }
 
         var recipeResponse = recipe.ToResponse();
+        
+        // Preserve original servings count
+        var originalServings = recipe.Servings;
+        
         var newRecipeResponse = await _openAIService.ReplaceRecipeAsync(request.Parameters, recipeResponse);
 
         // Use execution strategy to wrap transaction (required when EnableRetryOnFailure is enabled)
@@ -400,7 +404,7 @@ public class MenuService : IMenuService
                 recipe.PreparationTime = newRecipeResponse.PreparationTime;
                 recipe.CookingTime = newRecipeResponse.CookingTime;
                 recipe.Kcal = newRecipeResponse.Kcal;
-                recipe.Servings = newRecipeResponse.Servings;
+                recipe.Servings = originalServings; // Preserve original servings count
                 recipe.IsFromDatabase = newRecipeResponse.IsFromDatabase;
                 recipe.OriginalDishId = newRecipeResponse.OriginalDishId;
 
