@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Prometheus;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Cuisinier.Infrastructure.Data;
@@ -141,6 +142,10 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors();
 app.UseRateLimiter();
+
+// Prometheus Metrics
+app.UseMetricServer();
+app.UseHttpMetrics();
 
 // Health Checks
 app.MapHealthChecks("/health");
