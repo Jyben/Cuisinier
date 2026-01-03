@@ -45,104 +45,119 @@ public class MenuService : IMenuService
             request.Parameters.WeekStartDate,
             request.RecipeIds?.Count ?? 0);
 
-        // Use transaction to ensure atomicity of menu generation
-        using var transaction = await _context.Database.BeginTransactionAsync();
-        try
+        // Generate menu from OpenAI (outside transaction as it's an external call)
+        var menuResponse = await _openAIService.GenerateMenuAsync(request.Parameters);
+
+        // Use execution strategy to wrap transaction (required when EnableRetryOnFailure is enabled)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        int menuId = 0;
+        
+        await strategy.ExecuteAsync(async () =>
         {
-            // Delete all non-validated menus (menus without shopping list) before generating a new one
-            var nonValidatedMenus = await _context.Menus
-                .Where(m => !_context.ShoppingLists.Any(sl => sl.MenuId == m.Id))
-                .ToListAsync();
-
-            if (nonValidatedMenus.Any())
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
             {
-                _logger.LogInformation(
-                    "Deleting {Count} non-validated menus before generating new menu",
-                    nonValidatedMenus.Count);
-                _context.Menus.RemoveRange(nonValidatedMenus);
-                await _context.SaveChangesAsync();
-            }
-
-            var menuResponse = await _openAIService.GenerateMenuAsync(request.Parameters);
-
-            // Save parameters in MenuSettings entity (independent of the menu)
-            await SaveParametersInternalAsync(request.Parameters);
-
-            // Create menu in database (without parameters, they are now in MenuSettings)
-            var menu = new Menu
-            {
-                WeekStartDate = request.Parameters.WeekStartDate,
-                CreationDate = DateTime.UtcNow,
-                GenerationParametersJson = null
-            };
-
-            // If existing recipes are provided, reuse them
-            if (request.RecipeIds != null && request.RecipeIds.Any())
-            {
-                var existingRecipes = await _context.Recipes
-                    .Include(r => r.Ingredients)
-                    .Where(r => request.RecipeIds.Contains(r.Id))
+                // Delete all non-validated menus (menus without shopping list) before generating a new one
+                var nonValidatedMenus = await _context.Menus
+                    .Where(m => !_context.ShoppingLists.Any(sl => sl.MenuId == m.Id))
                     .ToListAsync();
 
-                foreach (var existingRecipe in existingRecipes)
+                if (nonValidatedMenus.Any())
                 {
-                    var newRecipe = new Recipe
-                    {
-                        MenuId = menu.Id,
-                        Title = existingRecipe.Title,
-                        Description = existingRecipe.Description,
-                        CompleteDescription = existingRecipe.CompleteDescription,
-                        DetailedRecipe = existingRecipe.DetailedRecipe,
-                        ImageUrl = existingRecipe.ImageUrl,
-                        PreparationTime = existingRecipe.PreparationTime,
-                        CookingTime = existingRecipe.CookingTime,
-                        Servings = existingRecipe.Servings,
-                        IsFromDatabase = true,
-                        OriginalDishId = existingRecipe.IsFromDatabase 
-                            ? existingRecipe.OriginalDishId ?? existingRecipe.Id 
-                            : existingRecipe.Id,
-                        Ingredients = existingRecipe.Ingredients.Select(i => new RecipeIngredient
-                        {
-                            Name = i.Name,
-                            Quantity = i.Quantity,
-                            Category = i.Category
-                        }).ToList()
-                    };
-                    menu.Recipes.Add(newRecipe);
+                    _logger.LogInformation(
+                        "Deleting {Count} non-validated menus before generating new menu",
+                        nonValidatedMenus.Count);
+                    _context.Menus.RemoveRange(nonValidatedMenus);
+                    await _context.SaveChangesAsync();
                 }
-            }
 
-            // Add newly generated recipes
-            foreach (var recipeResponse in menuResponse.Recipes)
+                // Save parameters in MenuSettings entity (independent of the menu)
+                await SaveParametersInternalAsync(request.Parameters);
+
+                // Create menu in database (without parameters, they are now in MenuSettings)
+                var menu = new Menu
+                {
+                    WeekStartDate = request.Parameters.WeekStartDate,
+                    CreationDate = DateTime.UtcNow,
+                    GenerationParametersJson = null
+                };
+
+                // If existing recipes are provided, reuse them
+                if (request.RecipeIds != null && request.RecipeIds.Any())
+                {
+                    var existingRecipes = await _context.Recipes
+                        .Include(r => r.Ingredients)
+                        .Where(r => request.RecipeIds.Contains(r.Id))
+                        .ToListAsync();
+
+                    foreach (var existingRecipe in existingRecipes)
+                    {
+                        var newRecipe = new Recipe
+                        {
+                            MenuId = menu.Id,
+                            Title = existingRecipe.Title,
+                            Description = existingRecipe.Description,
+                            CompleteDescription = existingRecipe.CompleteDescription,
+                            DetailedRecipe = existingRecipe.DetailedRecipe,
+                            ImageUrl = existingRecipe.ImageUrl,
+                            PreparationTime = existingRecipe.PreparationTime,
+                            CookingTime = existingRecipe.CookingTime,
+                            Servings = existingRecipe.Servings,
+                            IsFromDatabase = true,
+                            OriginalDishId = existingRecipe.IsFromDatabase 
+                                ? existingRecipe.OriginalDishId ?? existingRecipe.Id 
+                                : existingRecipe.Id,
+                            Ingredients = existingRecipe.Ingredients.Select(i => new RecipeIngredient
+                            {
+                                Name = i.Name,
+                                Quantity = i.Quantity,
+                                Category = i.Category
+                            }).ToList()
+                        };
+                        menu.Recipes.Add(newRecipe);
+                    }
+                }
+
+                // Add newly generated recipes
+                foreach (var recipeResponse in menuResponse.Recipes)
+                {
+                    var recipe = recipeResponse.ToEntity(menu.Id);
+                    menu.Recipes.Add(recipe);
+                }
+
+                _context.Menus.Add(menu);
+                await _context.SaveChangesAsync();
+
+                // Capture the ID before commit
+                menuId = menu.Id;
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Menu generated successfully. MenuId: {MenuId}, RecipesCount: {RecipesCount}",
+                    menu.Id,
+                    menu.Recipes.Count);
+            }
+            catch
             {
-                var recipe = recipeResponse.ToEntity(menu.Id);
-                menu.Recipes.Add(recipe);
+                await transaction.RollbackAsync();
+                throw;
             }
+        });
 
-            _context.Menus.Add(menu);
-            await _context.SaveChangesAsync();
-
-            await transaction.CommitAsync();
-
-            _logger.LogInformation(
-                "Menu generated successfully. MenuId: {MenuId}, RecipesCount: {RecipesCount}",
-                menu.Id,
-                menu.Recipes.Count);
-
-            // Load with relationships for response
-            var completeMenu = await _context.Menus
-                .Include(m => m.Recipes)
-                    .ThenInclude(r => r.Ingredients)
-                .FirstOrDefaultAsync(m => m.Id == menu.Id);
-
-            return completeMenu?.ToResponse() 
-                ?? throw new InvalidOperationException("Failed to load generated menu");
-        }
-        catch
+        if (menuId == 0)
         {
-            await transaction.RollbackAsync();
-            throw;
+            throw new InvalidOperationException("Failed to create menu in transaction");
         }
+
+        // Load with relationships for response (outside transaction)
+        var completeMenu = await _context.Menus
+            .Include(m => m.Recipes)
+                .ThenInclude(r => r.Ingredients)
+            .FirstOrDefaultAsync(m => m.Id == menuId);
+
+        return completeMenu?.ToResponse() 
+            ?? throw new InvalidOperationException("Failed to load generated menu");
     }
 
     public async Task<MenuResponse?> GetMenuAsync(int id)
@@ -321,38 +336,52 @@ public class MenuService : IMenuService
         var recipeResponse = recipe.ToResponse();
         var newRecipeResponse = await _openAIService.ReplaceRecipeAsync(request.Parameters, recipeResponse);
 
-        Recipe newRecipe;
+        int newRecipeId = 0;
         
-        // Use transaction to ensure atomicity
-        using var transaction = await _context.Database.BeginTransactionAsync();
-        try
+        // Use execution strategy to wrap transaction (required when EnableRetryOnFailure is enabled)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        
+        await strategy.ExecuteAsync(async () =>
         {
-            // Remove old recipe
-            _context.Recipes.Remove(recipe);
-            await _context.SaveChangesAsync();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Remove old recipe
+                _context.Recipes.Remove(recipe);
+                await _context.SaveChangesAsync();
 
-            // Add new one
-            newRecipe = newRecipeResponse.ToEntity(menuId);
-            _context.Recipes.Add(newRecipe);
-            await _context.SaveChangesAsync();
+                // Add new one
+                var newRecipe = newRecipeResponse.ToEntity(menuId);
+                _context.Recipes.Add(newRecipe);
+                await _context.SaveChangesAsync();
 
-            await transaction.CommitAsync();
-        }
-        catch
+                // Capture the ID before commit
+                newRecipeId = newRecipe.Id;
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+
+        if (newRecipeId == 0)
         {
-            await transaction.RollbackAsync();
-            throw;
+            throw new InvalidOperationException("Failed to create new recipe in transaction");
         }
 
+        // Load with relationships for response (outside transaction)
         var completeRecipe = await _context.Recipes
             .Include(r => r.Ingredients)
-            .FirstOrDefaultAsync(r => r.Id == newRecipe.Id);
+            .FirstOrDefaultAsync(r => r.Id == newRecipeId);
 
         _logger.LogInformation(
             "Recipe replaced successfully. MenuId: {MenuId}, OldRecipeId: {OldRecipeId}, NewRecipeId: {NewRecipeId}",
             menuId,
             recipeId,
-            newRecipe.Id);
+            newRecipeId);
 
         return completeRecipe?.ToResponse() 
             ?? throw new InvalidOperationException("Failed to load replaced recipe");
