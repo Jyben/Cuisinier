@@ -1,0 +1,141 @@
+@using Cuisinier.App.Services
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IFavoriteApi FavoriteApi
+@inject IMenuApi MenuApi
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
+        }
+        
+        @if (_favorites != null && _favorites.Any())
+        {
+            <MudGrid Spacing="2">
+                @foreach (var favorite in _favorites)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudCard Elevation="1" Class="favorite-selection-card" Style="cursor: pointer;" @onclick="@(() => SelectFavorite(favorite))">
+                            <MudCardContent Class="pa-3">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    @if (!string.IsNullOrEmpty(favorite.ImageUrl))
+                                    {
+                                        <MudImage Src="@favorite.ImageUrl" Alt="@favorite.Title" Width="80" Height="80" ObjectFit="ObjectFit.Cover" Style="border-radius: 4px;" />
+                                    }
+                                    <MudStack Style="flex: 1;">
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600; margin: 0;">@favorite.Title</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: rgba(0,0,0,0.6); margin: 0;">@favorite.Description</MudText>
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="color: rgba(0,0,0,0.54);" />
+                                            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@favorite.Servings</MudText>
+                                            @if (favorite.PreparationTime.HasValue)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="ml-2" Style="color: rgba(0,0,0,0.54);" />
+                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.PreparationTime.Value.TotalMinutes)min</MudText>
+                                            }
+                                            @if (favorite.CookingTime.HasValue)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="ml-2" Style="color: rgba(0,0,0,0.54);" />
+                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.CookingTime.Value.TotalMinutes)min</MudText>
+                                            }
+                                        </MudStack>
+                                    </MudStack>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_loading)
+        {
+            <MudText Typo="Typo.body2" Class="text-center" Style="color: rgba(0,0,0,0.6); padding: 2rem;">
+                Aucun plat favori disponible
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annuler</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance? MudDialog { get; set; }
+    [Parameter] public int MenuId { get; set; }
+    [Parameter] public bool IsPendingMode { get; set; } = false;
+    
+    private List<FavoriteResponse>? _favorites;
+    private bool _loading = true;
+    private bool _isAdding = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFavorites();
+    }
+
+    private async Task LoadFavorites()
+    {
+        try
+        {
+            _loading = true;
+            _favorites = await FavoriteApi.GetAllFavoritesAsync();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger les favoris. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectFavorite(FavoriteResponse favorite)
+    {
+        if (_isAdding) return;
+
+        _isAdding = true;
+        try
+        {
+            if (IsPendingMode)
+            {
+                // In pending mode, just return the favorite without calling API
+                MudDialog?.Close(DialogResult.Ok(favorite));
+            }
+            else
+            {
+                // For validated menus, add directly to database
+                await MenuApi.AddFavoriteToMenuAsync(MenuId, favorite.Id);
+                Snackbar.Add($"Plat '{favorite.Title}' ajouté au menu", Severity.Success);
+                MudDialog?.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors de l'ajout : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isAdding = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+}
+
+<style>
+    .favorite-selection-card {
+        transition: all 0.2s ease;
+    }
+
+    .favorite-selection-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
+    }
+</style>

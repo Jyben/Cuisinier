@@ -2,18 +2,44 @@
 
 <MudDivider Class="my-4" />
 <MudText Typo="Typo.h6" Class="mb-3">Apports nutritionnels</MudText>
-<MudNumericField T="int?" 
-               Value="@Value"
-               ValueChanged="@ValueChanged"
-               Label="Calories maximales par plat (kcal)"
-               HelperText="Optionnel : nombre de calories maximales souhaitées pour chaque plat"
-               Min="0"
-               Max="5000"
-               Variant="Variant.Outlined"
-               Class="mb-4" />
+
+<MudSwitch T="bool" 
+          Value="@LimitKcal" 
+          ValueChanged="@((bool value) => LimitKcalChanged.InvokeAsync(value))"
+          Label="Limiter les calories par plat"
+          Color="Color.Primary"
+          Class="mb-3" />
+
+@if (LimitKcal)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="6">
+            <MudNumericField T="int?" 
+                           Value="@MinValue"
+                           ValueChanged="@((int? value) => MinValueChanged.InvokeAsync(value))"
+                           Label="Calories minimum (kcal)"
+                           Min="0"
+                           Max="5000"
+                           Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudNumericField T="int?" 
+                           Value="@MaxValue"
+                           ValueChanged="@((int? value) => MaxValueChanged.InvokeAsync(value))"
+                           Label="Calories maximum (kcal)"
+                           Min="0"
+                           Max="5000"
+                           Variant="Variant.Outlined" />
+        </MudItem>
+    </MudGrid>
+}
 
 @code {
-    [Parameter] public int? Value { get; set; }
-    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+    [Parameter] public bool LimitKcal { get; set; }
+    [Parameter] public EventCallback<bool> LimitKcalChanged { get; set; }
+    [Parameter] public int? MinValue { get; set; }
+    [Parameter] public EventCallback<int?> MinValueChanged { get; set; }
+    [Parameter] public int? MaxValue { get; set; }
+    [Parameter] public EventCallback<int?> MaxValueChanged { get; set; }
 }
 

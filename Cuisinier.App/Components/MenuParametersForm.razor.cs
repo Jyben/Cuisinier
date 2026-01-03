@@ -58,8 +58,13 @@ namespace Cuisinier.App.Components
         // Time
         private bool _limitPreparationTime = false;
         private bool _limitCookingTime = false;
-        private int _preparationTimeMinutes = 15;
-        private int _cookingTimeMinutes = 30;
+        private int? _maxPreparationTimeMinutes = 15;
+        private int? _maxCookingTimeMinutes = 30;
+        
+        // Calories
+        private bool _limitKcal = false;
+        private int? _minKcal = null;
+        private int? _maxKcal = null;
 
         private bool _isInitialized = false;
         private MenuParameters? _lastParametersHash = null;
@@ -106,7 +111,8 @@ namespace Cuisinier.App.Components
                 WeightedOptions = Parameters.WeightedOptions != null ? new Dictionary<string, int?>(Parameters.WeightedOptions) : new Dictionary<string, int?>(),
                 MaxPreparationTime = Parameters.MaxPreparationTime,
                 MaxCookingTime = Parameters.MaxCookingTime,
-                TotalKcalPerDish = Parameters.TotalKcalPerDish
+                MinKcalPerDish = Parameters.MinKcalPerDish,
+                MaxKcalPerDish = Parameters.MaxKcalPerDish
             };
         }
 
@@ -125,7 +131,8 @@ namespace Cuisinier.App.Components
                    hash1.WeightedOptions?.Count == hash2.WeightedOptions?.Count &&
                    hash1.MaxPreparationTime == hash2.MaxPreparationTime &&
                    hash1.MaxCookingTime == hash2.MaxCookingTime &&
-                   hash1.TotalKcalPerDish == hash2.TotalKcalPerDish;
+                   hash1.MinKcalPerDish == hash2.MinKcalPerDish &&
+                   hash1.MaxKcalPerDish == hash2.MaxKcalPerDish;
         }
 
         private DateTime GetNextMonday()
@@ -179,12 +186,20 @@ namespace Cuisinier.App.Components
             if (Parameters.MaxPreparationTime.HasValue)
             {
                 _limitPreparationTime = true;
-                _preparationTimeMinutes = (int)Parameters.MaxPreparationTime.Value.TotalMinutes;
+                _maxPreparationTimeMinutes = (int)Parameters.MaxPreparationTime.Value.TotalMinutes;
             }
             if (Parameters.MaxCookingTime.HasValue)
             {
                 _limitCookingTime = true;
-                _cookingTimeMinutes = (int)Parameters.MaxCookingTime.Value.TotalMinutes;
+                _maxCookingTimeMinutes = (int)Parameters.MaxCookingTime.Value.TotalMinutes;
+            }
+            
+            // Initialize calories
+            if (Parameters.MinKcalPerDish.HasValue || Parameters.MaxKcalPerDish.HasValue)
+            {
+                _limitKcal = true;
+                _minKcal = Parameters.MinKcalPerDish;
+                _maxKcal = Parameters.MaxKcalPerDish;
             }
         }
 
@@ -317,8 +332,12 @@ namespace Cuisinier.App.Components
             Parameters.SeasonalFoods = _seasonalFoodOption == "toujours" || _seasonalFoodOption == "partiellement";
             
             // Sync times
-            Parameters.MaxPreparationTime = _limitPreparationTime ? TimeSpan.FromMinutes(_preparationTimeMinutes) : null;
-            Parameters.MaxCookingTime = _limitCookingTime ? TimeSpan.FromMinutes(_cookingTimeMinutes) : null;
+            Parameters.MaxPreparationTime = _limitPreparationTime && _maxPreparationTimeMinutes.HasValue ? TimeSpan.FromMinutes(_maxPreparationTimeMinutes.Value) : null;
+            Parameters.MaxCookingTime = _limitCookingTime && _maxCookingTimeMinutes.HasValue ? TimeSpan.FromMinutes(_maxCookingTimeMinutes.Value) : null;
+            
+            // Sync calories
+            Parameters.MinKcalPerDish = _limitKcal ? _minKcal : null;
+            Parameters.MaxKcalPerDish = _limitKcal ? _maxKcal : null;
             
             // Weighted options are already synced because they are directly bound
         }

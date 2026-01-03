@@ -28,9 +28,17 @@ public class MenuParametersValidator : AbstractValidator<MenuParameters>
             .Must(time => !time.HasValue || time.Value.TotalMinutes > 0)
             .WithMessage("Maximum cooking time must be positive");
 
-        RuleFor(x => x.TotalKcalPerDish)
-            .Must(kcal => !kcal.HasValue || kcal.Value > 0)
-            .WithMessage("Total calories per dish must be positive");
+        RuleFor(x => x.MinKcalPerDish)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.MinKcalPerDish.HasValue);
+            
+        RuleFor(x => x.MaxKcalPerDish)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.MaxKcalPerDish.HasValue);
+            
+        RuleFor(x => x)
+            .Must(x => !x.MinKcalPerDish.HasValue || !x.MaxKcalPerDish.HasValue || x.MinKcalPerDish.Value <= x.MaxKcalPerDish.Value)
+            .WithMessage("Les calories minimales doivent être inférieures ou égales aux calories maximales");
     }
 
     private bool BeValidWeekStartDate(DateTime date)

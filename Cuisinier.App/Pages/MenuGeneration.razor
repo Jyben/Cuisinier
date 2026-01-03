@@ -4,11 +4,14 @@
 @using Cuisinier.Core.DTOs
 @using MudBlazor
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.Extensions.Logging
 @inject IMenuApi MenuApi
 @inject IShoppingListApi ShoppingListApi
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<MenuGeneration> Logger
 @implements IAsyncDisposable
 
 <PageTitle>Génération du menu</PageTitle>
@@ -37,10 +40,31 @@
                 <RecipeCard 
                     Recipe="recipe" 
                     ShowActions="true" 
+                    ShowFavoriteButton="false"
                     OnDelete="DeleteRecipe" 
                     OnReplace="ReplaceRecipe"
                     IsGenerating="@IsGenerating(recipe.Id)"
+                    IsReplacing="@IsReplacing(recipe.Id)"
                     MenuValid="@_menuValid" />
+            </MudItem>
+        }
+        @foreach (var favorite in _pendingFavorites)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <RecipeCard 
+                    Recipe="@ConvertFavoriteToRecipe(favorite)" 
+                    ShowActions="true" 
+                    ShowFavoriteButton="false"
+                    OnDelete="@(() => RemovePendingFavorite(favorite.Id))" 
+                    OnReplace="@(() => {})"
+                    IsGenerating="false"
+                    MenuValid="@_menuValid" />
+            </MudItem>
+        }
+        @if (!_menuValid)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <AddFavoriteCard OnAddClick="OpenAddFavoriteDialog" />
             </MudItem>
         }
     </MudGrid>
@@ -80,7 +104,9 @@
     private bool _menuValid = false;
     private HubConnection? _hubConnection;
     private Dictionary<int, bool> _recipesBeingGenerated = new();
+    private Dictionary<int, bool> _recipesBeingReplaced = new();
     private int? _lastConnectedMenuId = null;
+    private List<FavoriteResponse> _pendingFavorites = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -173,6 +199,11 @@
         return false;
     }
 
+    private bool IsReplacing(int recipeId)
+    {
+        return _recipesBeingReplaced.ContainsKey(recipeId) && _recipesBeingReplaced[recipeId];
+    }
+
     private async Task LoadMenu()
     {
         try
@@ -182,6 +213,11 @@
             
             // Check if the menu has been validated (if a shopping list exists)
             _menuValid = await VerifyMenuValid();
+            
+            // Reset and rebuild the dictionary based on current recipe state
+            _recipesBeingGenerated.Clear();
+            // Clear replacing state when reloading (the recipe has been replaced)
+            _recipesBeingReplaced.Clear();
             
             // Mark recipes without DetailedRecipe as being generated
             if (_menu != null && _menuValid)
@@ -217,6 +253,13 @@
 
     private async Task DeleteRecipe(int recipeId)
     {
+        // If recipeId is negative, it's a pending favorite
+        if (recipeId < 0)
+        {
+            RemovePendingFavorite(-recipeId);
+            return;
+        }
+
         try
         {
             await MenuApi.DeleteRecipeAsync(MenuId, recipeId);
@@ -230,36 +273,74 @@
 
     private async Task ReplaceRecipe(int recipeId)
     {
-        // TODO: Implement replacement
-        await Task.CompletedTask;
+        try
+        {
+            // Mark recipe as being replaced
+            _recipesBeingReplaced[recipeId] = true;
+            StateHasChanged();
+
+            // Get the last parameters used for menu generation
+            var parameters = await MenuApi.GetLastParametersAsync();
+            if (parameters == null)
+            {
+                _recipesBeingReplaced[recipeId] = false;
+                StateHasChanged();
+                Snackbar.Add("Impossible de récupérer les paramètres du menu. Veuillez réessayer.", Severity.Error);
+                return;
+            }
+
+            var request = new RecipeReplacementRequest
+            {
+                Parameters = parameters
+            };
+
+            await MenuApi.ReplaceRecipeAsync(MenuId, recipeId, request);
+            
+            // Reload the menu to show the new recipe (this will clear the replacing state)
+            await LoadMenu();
+            
+            Snackbar.Add("Plat remplacé avec succès.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error replacing recipe {RecipeId}", recipeId);
+            _recipesBeingReplaced[recipeId] = false;
+            StateHasChanged();
+            Snackbar.Add("Impossible de remplacer le plat. Veuillez réessayer.", Severity.Error);
+        }
     }
 
     private async Task ValidateMenu()
+    {
+        try
         {
-            try
-            {
-                _isValidating = true;
-                StateHasChanged();
+            _isValidating = true;
+            StateHasChanged();
 
-                // Mark recipes without details as being generated
-                if (_menu != null)
+            // Mark recipes without details as being generated
+            if (_menu != null)
+            {
+                foreach (var recipe in _menu.Recipes.Where(r => string.IsNullOrEmpty(r.DetailedRecipe)))
                 {
-                    foreach (var recipe in _menu.Recipes.Where(r => string.IsNullOrEmpty(r.DetailedRecipe)))
-                    {
-                        _recipesBeingGenerated[recipe.Id] = true;
-                    }
+                    _recipesBeingGenerated[recipe.Id] = true;
                 }
+            }
 
-                await MenuApi.ValidateMenuAsync(MenuId);
-                Navigation.NavigateTo($"/shopping-list/{MenuId}");
-            }
-            catch
+            var request = new ValidateMenuRequest
             {
-                _isValidating = false;
-                StateHasChanged();
-                Snackbar.Add("Impossible de valider le menu. Veuillez réessayer.", Severity.Error);
-            }
+                FavoriteIds = _pendingFavorites.Select(f => f.Id).ToList()
+            };
+
+            await MenuApi.ValidateMenuAsync(MenuId, request);
+            Navigation.NavigateTo($"/shopping-list/{MenuId}");
         }
+        catch
+        {
+            _isValidating = false;
+            StateHasChanged();
+            Snackbar.Add("Impossible de valider le menu. Veuillez réessayer.", Severity.Error);
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -278,6 +359,67 @@
                 await _hubConnection.DisposeAsync();
             }
         }
+    }
+
+    private async Task OpenAddFavoriteDialog()
+    {
+        var parameters = new DialogParameters<AddFavoriteDialog>
+        {
+            { x => x.MenuId, MenuId },
+            { x => x.IsPendingMode, true }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddFavoriteDialog>("Ajouter un plat favori", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is FavoriteResponse favorite)
+        {
+            if (!_pendingFavorites.Any(f => f.Id == favorite.Id))
+            {
+                _pendingFavorites.Add(favorite);
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void RemovePendingFavorite(int favoriteId)
+    {
+        _pendingFavorites.RemoveAll(f => f.Id == favoriteId);
+        StateHasChanged();
+    }
+
+    private RecipeResponse ConvertFavoriteToRecipe(FavoriteResponse favorite)
+    {
+        return new RecipeResponse
+        {
+            Id = -favorite.Id, // Negative ID to distinguish from real recipes
+            MenuId = MenuId,
+            Title = favorite.Title,
+            Description = favorite.Description,
+            CompleteDescription = favorite.CompleteDescription,
+            DetailedRecipe = favorite.DetailedRecipe,
+            ImageUrl = favorite.ImageUrl,
+            PreparationTime = favorite.PreparationTime,
+            CookingTime = favorite.CookingTime,
+            Kcal = favorite.Kcal,
+            Servings = favorite.Servings,
+            Ingredients = favorite.Ingredients.Select(i => new IngredientResponse
+            {
+                Id = i.Id,
+                Name = i.Name,
+                Quantity = i.Quantity,
+                Category = i.Category
+            }).ToList(),
+            IsFromDatabase = true,
+            OriginalDishId = favorite.Id
+        };
     }
 
     private async Task DeleteAll()

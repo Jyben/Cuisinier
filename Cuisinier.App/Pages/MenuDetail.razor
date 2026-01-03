@@ -9,6 +9,7 @@
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @implements IAsyncDisposable
 
 <PageTitle>Détails du menu</PageTitle>
@@ -30,8 +31,16 @@
                 <RecipeCard 
                     Recipe="recipe" 
                     ShowDetails="true"
+                    ShowActions="@_menuValid"
+                    OnDelete="DeleteRecipe"
                     MenuValid="@_menuValid"
                     IsGenerating="@IsGenerating(recipe.Id)" />
+            </MudItem>
+        }
+        @if (_menuValid)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <AddFavoriteCard OnAddClick="OpenAddFavoriteDialog" />
             </MudItem>
         }
     </MudGrid>
@@ -164,6 +173,9 @@
             // Check if the menu has been validated (if a shopping list exists)
             _menuValid = await VerifyMenuValid();
             
+            // Reset and rebuild the dictionary based on current recipe state
+            _recipesBeingGenerated.Clear();
+            
             // Mark recipes without DetailedRecipe as being generated
             if (_menu != null && _menuValid)
             {
@@ -211,6 +223,64 @@
             finally
             {
                 await _hubConnection.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task OpenAddFavoriteDialog()
+    {
+        var parameters = new DialogParameters<AddFavoriteDialog>
+        {
+            { x => x.MenuId, MenuId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddFavoriteDialog>("Ajouter un plat favori", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadMenu();
+        }
+    }
+
+    private async Task DeleteRecipe(int recipeId)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer le plat" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer ce plat du menu ? Les ingrédients seront également retirés de la liste de courses." },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await MenuApi.DeleteRecipeAsync(MenuId, recipeId);
+                Snackbar.Add("Plat supprimé du menu", Severity.Success);
+                await LoadMenu();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
             }
         }
     }

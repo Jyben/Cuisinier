@@ -11,8 +11,9 @@ public interface IMenuService
     Task SaveParametersAsync(MenuParameters parameters);
     Task<RecipeResponse> ReplaceRecipeAsync(int menuId, int recipeId, RecipeReplacementRequest request);
     Task<RecipeResponse> ReplaceIngredientAsync(int menuId, int recipeId, IngredientReplacementRequest request);
+    Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId);
     Task DeleteRecipeAsync(int menuId, int recipeId);
     Task DeleteMenuAsync(int menuId);
-    Task<MenuResponse> ValidateMenuAsync(int menuId);
+    Task<MenuResponse> ValidateMenuAsync(int menuId, ValidateMenuRequest? request = null);
 }
 

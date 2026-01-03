@@ -2,7 +2,7 @@
 
 <MudDivider Class="my-4" />
 <MudText Typo="Typo.h6" Class="mb-2">Types de plats</MudText>
-<MudText Typo="Typo.body2" Class="mb-4 helper-text-secondary">Indiquez les types de plats souhaités. Le nombre est optionnel (ex: 1 plat de viande rouge)</MudText>
+<MudText Typo="Typo.body2" Class="mb-3 helper-text-secondary">Le nombre est optionnel</MudText>
 
 <div class="types-plats-container">
     @for (int i = 0; i < TypesValues.Count; i++)
@@ -10,17 +10,8 @@
         var index = i;
         var localIndex = index;
         int? localValue = localIndex < NumberValues.Count ? NumberValues[localIndex] : null;
-        <MudPaper Elevation="1" Class="type-plat-card">
-            <MudStack Spacing="3" Class="pa-3">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd">
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
-                                  Color="Color.Error" 
-                                  Size="Size.Small"
-                                  Variant="Variant.Text"
-                                  OnClick="@(() => OnRemove.InvokeAsync(index))"
-                                  Class="delete-type-button" />
-                </MudStack>
-                
+        <MudPaper Elevation="1" Class="type-plat-card mb-2">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="pa-2">
                 <MudSelect T="string" 
                           Value="@TypesValues[index]"
                           ValueChanged="@((string value) => {
@@ -29,31 +20,35 @@
                           })"
                           Label="Type de plat"
                           Variant="Variant.Outlined"
-                          FullWidth="true">
+                          Style="width: 200px;">
                     @foreach (var typeOption in TypeOptions)
                     {
                         <MudSelectItem Value="@typeOption">@typeOption</MudSelectItem>
                     }
                 </MudSelect>
                 
-                <MudStack Spacing="2">
-                    <MudNumericField T="int?" 
-                                    Value="@localValue"
-                                    ValueChanged="@((int? value) => {
-                                        while (NumberValues.Count <= localIndex)
-                                        {
-                                            NumberValues.Add(null);
-                                        }
-                                        NumberValues[localIndex] = value;
-                                        OnChange.InvokeAsync();
-                                    })"
-                                    Label="Nombre (optionnel)"
-                                    HelperText="@(localValue.HasValue ? $"{localValue.Value} fois" : "Laisser vide si le nombre n'est pas important")"
-                                    Min="1"
-                                    Max="20"
-                                    Variant="Variant.Outlined"
-                                    FullWidth="true" />
-                </MudStack>
+                <MudNumericField T="int?" 
+                                Value="@localValue"
+                                ValueChanged="@((int? value) => {
+                                    while (NumberValues.Count <= localIndex)
+                                    {
+                                        NumberValues.Add(null);
+                                    }
+                                    NumberValues[localIndex] = value;
+                                    OnChange.InvokeAsync();
+                                })"
+                                Label="Nombre"
+                                Min="1"
+                                Max="20"
+                                Variant="Variant.Outlined"
+                                Style="width: 120px;" />
+                
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                              Color="Color.Error" 
+                              Size="Size.Small"
+                              Variant="Variant.Text"
+                              OnClick="@(() => OnRemove.InvokeAsync(index))"
+                              Class="delete-type-button" />
             </MudStack>
         </MudPaper>
     }

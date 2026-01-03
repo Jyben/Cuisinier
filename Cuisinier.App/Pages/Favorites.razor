@@ -1,0 +1,241 @@
+@page "/favorites"
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IFavoriteApi FavoriteApi
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Favoris</PageTitle>
+
+<PageHeader Title="Mes plats favoris" />
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_favorites != null && _favorites.Any())
+{
+    <MudGrid>
+        @foreach (var favorite in _favorites)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <MudCard Elevation="2" Class="favorite-card">
+                    <div class="favorite-card-header">
+                        @if (!string.IsNullOrEmpty(favorite.ImageUrl))
+                        {
+                            <MudImage Src="@favorite.ImageUrl" Alt="@favorite.Title" Height="160" ObjectFit="ObjectFit.Cover" />
+                        }
+                        <MudIconButton 
+                            Icon="@Icons.Material.Filled.Edit"
+                            Size="Size.Small"
+                            Variant="Variant.Text"
+                            Color="Color.Primary"
+                            OnClick="@(() => EditFavorite(favorite))"
+                            Class="edit-button" />
+                    </div>
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.h6" Class="mb-1" Style="font-weight: 600;">@favorite.Title</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(0,0,0,0.6); line-height: 1.4;">@favorite.Description</MudText>
+                        
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudTooltip Text="Nombre de personnes">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="color: rgba(0,0,0,0.54);" />
+                            </MudTooltip>
+                            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@favorite.Servings</MudText>
+                            @if (favorite.PreparationTime.HasValue)
+                            {
+                                <MudTooltip Text="Temps de préparation">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.PreparationTime.Value.TotalMinutes)min</MudText>
+                            }
+                            @if (favorite.CookingTime.HasValue)
+                            {
+                                <MudTooltip Text="Temps de cuisson">
+                                    <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.CookingTime.Value.TotalMinutes)min</MudText>
+                            }
+                            @if (favorite.Kcal.HasValue)
+                            {
+                                <MudTooltip Text="Calories">
+                                    <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@favorite.Kcal.Value kcal</MudText>
+                            }
+                        </MudStack>
+                        
+                        <MudExpansionPanels>
+                            <MudExpansionPanel Text="Ingrédients" Icon="@Icons.Material.Filled.ListAlt">
+                                <div style="padding: 0; margin: 0;">
+                                    @foreach (var ingredient in favorite.Ingredients)
+                                    {
+                                        <div style="padding: 2px 0; line-height: 1.2; font-size: 0.875rem;">
+                                            <span style="font-weight: 500;">@ingredient.Name</span>: <span style="color: rgba(0,0,0,0.7);">@ingredient.Quantity</span>
+                                        </div>
+                                    }
+                                </div>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    </MudCardContent>
+                    <MudCardActions Class="pa-3 pt-0">
+                        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Style="width: 100%;">
+                            <MudButton 
+                                Variant="Variant.Outlined" 
+                                Size="Size.Small" 
+                                Color="Color.Error" 
+                                OnClick="@(() => DeleteFavorite(favorite.Id))"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                Class="action-button">
+                                Supprimer
+                            </MudButton>
+                        </MudStack>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+else if (!_loading)
+{
+    <MudCard Elevation="1">
+        <MudCardContent>
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="padding: 3rem;">
+                <MudIcon Icon="@Icons.Material.Filled.FavoriteBorder" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                <MudText Typo="Typo.h6" Class="text-center">Aucun plat favori</MudText>
+                <MudText Typo="Typo.body2" Class="text-center" Style="color: rgba(0,0,0,0.6);">Ajoutez des plats à vos favoris depuis les cartes de recettes</MudText>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private List<FavoriteResponse>? _favorites;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFavorites();
+    }
+
+    private async Task LoadFavorites()
+    {
+        try
+        {
+            _loading = true;
+            _favorites = await FavoriteApi.GetAllFavoritesAsync();
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger les favoris. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task EditFavorite(FavoriteResponse favorite)
+    {
+        var parameters = new DialogParameters<EditFavoriteDialog>
+        {
+            { x => x.Favorite, favorite }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<EditFavoriteDialog>("Modifier le plat favori", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadFavorites();
+        }
+    }
+
+    private async Task DeleteFavorite(int favoriteId)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer le favori" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer ce plat de vos favoris ?" },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await FavoriteApi.DeleteFavoriteAsync(favoriteId);
+                Snackbar.Add("Favori supprimé avec succès", Severity.Success);
+                await LoadFavorites();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+
+<style>
+    .favorite-card {
+        position: relative;
+    }
+
+    .favorite-card-header {
+        position: relative;
+    }
+
+    .edit-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(4px);
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .edit-button:hover {
+        background-color: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+        transition: all 0.2s ease;
+    }
+
+    .action-button {
+        text-transform: none;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+
+    /* Round bottom corners of last expansion panel */
+    .favorite-card .mud-expansion-panels .mud-expansion-panel:last-child,
+    .favorite-card .mud-expansion-panels .mud-expansion-panel:last-child > *,
+    .favorite-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header,
+    .favorite-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-content,
+    .favorite-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header > * {
+        border-bottom-left-radius: var(--mud-default-borderradius, 4px) !important;
+        border-bottom-right-radius: var(--mud-default-borderradius, 4px) !important;
+    }
+</style>

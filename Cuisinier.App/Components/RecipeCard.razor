@@ -1,13 +1,40 @@
 @using Cuisinier.Core.DTOs
 @using MudBlazor
 @using Markdig
+@using Refit
 @inject IDialogService DialogService
+@inject IFavoriteApi FavoriteApi
+@inject ISnackbar Snackbar
 
 <MudCard Elevation="2" Class="recette-card">
-    @if (!string.IsNullOrEmpty(Recipe.ImageUrl))
+    @if (IsReplacing)
     {
-        <MudImage Src="@Recipe.ImageUrl" Alt="@Recipe.Title" Height="160" ObjectFit="ObjectFit.Cover" />
+        <div class="replacing-overlay">
+            <div class="replacing-content">
+                <MudProgressCircular Size="Size.Large" Indeterminate="true" Color="Color.Primary" />
+                <MudText Typo="Typo.body1" Class="mt-3" Style="color: white; font-weight: 500;">
+                    Remplacement en cours...
+                </MudText>
+            </div>
+        </div>
     }
+    <div class="recette-card-header">
+        @if (!string.IsNullOrEmpty(Recipe.ImageUrl))
+        {
+            <MudImage Src="@Recipe.ImageUrl" Alt="@Recipe.Title" Height="160" ObjectFit="ObjectFit.Cover" />
+        }
+        @if (ShowFavoriteButton)
+        {
+            <MudIconButton 
+                Icon="@(_isFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                Color="@(_isFavorite ? Color.Error : Color.Default)"
+                Size="Size.Small"
+                Variant="Variant.Text"
+                OnClick="ToggleFavorite"
+                Class="favorite-button"
+                Style="@(_isFavorite ? "color: var(--mud-palette-error);" : "")" />
+        }
+    </div>
     <MudCardContent Class="pa-3">
         <MudText Typo="Typo.h6" Class="mb-1" Style="font-weight: 600;">@Recipe.Title</MudText>
         <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(0,0,0,0.6); line-height: 1.4;">@Recipe.Description</MudText>
@@ -105,6 +132,7 @@
                         Color="Color.Primary" 
                         OnClick="() => OnReplace.InvokeAsync(Recipe.Id)"
                         StartIcon="@Icons.Material.Filled.SwapHoriz"
+                        Disabled="@IsReplacing"
                         Class="action-button">
                         Remplacer
                     </MudButton>
@@ -130,10 +158,131 @@
     [Parameter] public RecipeResponse Recipe { get; set; } = new();
     [Parameter] public bool ShowDetails { get; set; } = false;
     [Parameter] public bool ShowActions { get; set; } = false;
+    [Parameter] public bool ShowFavoriteButton { get; set; } = true;
     [Parameter] public bool IsGenerating { get; set; } = false;
+    [Parameter] public bool IsReplacing { get; set; } = false;
     [Parameter] public bool MenuValid { get; set; } = false;
     [Parameter] public EventCallback<int> OnDelete { get; set; }
     [Parameter] public EventCallback<int> OnReplace { get; set; }
+
+    private bool _isFavorite = false;
+    private bool _isLoadingFavorite = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckIfFavorite();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CheckIfFavorite();
+    }
+
+    private async Task CheckIfFavorite()
+    {
+        try
+        {
+            var checkRequest = new CheckDuplicateRequest
+            {
+                Title = Recipe.Title,
+                Ingredients = Recipe.Ingredients.Select(i => new IngredientRequest
+                {
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Category = i.Category
+                }).ToList()
+            };
+
+            _isFavorite = await FavoriteApi.CheckDuplicateAsync(checkRequest);
+        }
+        catch
+        {
+            _isFavorite = false;
+        }
+    }
+
+    private async Task ToggleFavorite()
+    {
+        if (_isLoadingFavorite) return;
+
+        _isLoadingFavorite = true;
+        try
+        {
+            if (_isFavorite)
+            {
+                // Find and delete the favorite
+                var favorites = await FavoriteApi.GetAllFavoritesAsync();
+                var favorite = favorites.FirstOrDefault(f =>
+                {
+                    if (f.Title.Trim().ToLower() != Recipe.Title.Trim().ToLower())
+                        return false;
+
+                    if (f.Ingredients.Count != Recipe.Ingredients.Count)
+                        return false;
+
+                    var fIngredients = f.Ingredients
+                        .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                        .OrderBy(i => i.Name)
+                        .ThenBy(i => i.Quantity)
+                        .ToList();
+
+                    var rIngredients = Recipe.Ingredients
+                        .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                        .OrderBy(i => i.Name)
+                        .ThenBy(i => i.Quantity)
+                        .ToList();
+
+                    return fIngredients.SequenceEqual(rIngredients, new IngredientEqualityComparer());
+                });
+
+                if (favorite != null)
+                {
+                    await FavoriteApi.DeleteFavoriteAsync(favorite.Id);
+                    _isFavorite = false;
+                    Snackbar.Add("Plat retiré des favoris", Severity.Success);
+                }
+            }
+            else
+            {
+                // Add to favorites
+                var request = new FavoriteRequest
+                {
+                    Title = Recipe.Title,
+                    Description = Recipe.Description,
+                    CompleteDescription = Recipe.CompleteDescription,
+                    DetailedRecipe = Recipe.DetailedRecipe,
+                    ImageUrl = Recipe.ImageUrl,
+                    PreparationTime = Recipe.PreparationTime,
+                    CookingTime = Recipe.CookingTime,
+                    Kcal = Recipe.Kcal,
+                    Servings = Recipe.Servings,
+                    Ingredients = Recipe.Ingredients.Select(i => new IngredientRequest
+                    {
+                        Name = i.Name,
+                        Quantity = i.Quantity,
+                        Category = i.Category
+                    }).ToList()
+                };
+
+                await FavoriteApi.AddFavoriteAsync(request);
+                _isFavorite = true;
+                Snackbar.Add("Plat ajouté aux favoris", Severity.Success);
+            }
+        }
+        catch (ApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            Snackbar.Add("Ce plat existe déjà dans les favoris", Severity.Warning);
+            _isFavorite = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingFavorite = false;
+        }
+    }
 
     private async Task OpenDetailedRecipe()
     {
@@ -151,9 +300,48 @@
 
         await DialogService.ShowAsync<RecipeDetailsDialog>("Recette détaillée", parameters, options);
     }
+
+    private class IngredientEqualityComparer : IEqualityComparer<(string Name, string Quantity)>
+    {
+        public bool Equals((string Name, string Quantity) x, (string Name, string Quantity) y)
+        {
+            return x.Name == y.Name && x.Quantity == y.Quantity;
+        }
+
+        public int GetHashCode((string Name, string Quantity) obj)
+        {
+            return HashCode.Combine(obj.Name, obj.Quantity);
+        }
+    }
 }
 
 <style>
+    .recette-card {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .recette-card-header {
+        position: relative;
+    }
+
+    .favorite-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(4px);
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .favorite-button:hover {
+        background-color: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+        transition: all 0.2s ease;
+    }
+
     .action-button {
         text-transform: none;
         font-weight: 500;
@@ -165,6 +353,38 @@
         font-weight: 500;
         justify-content: flex-start;
         margin-top: 0.5rem;
+    }
+
+    .replacing-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        border-radius: var(--mud-default-borderradius);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    .replacing-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
     }
 
     /* Arrondir le bas du dernier panel dans MudExpansionPanels - cibler tous les éléments possibles */

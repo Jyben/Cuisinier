@@ -100,10 +100,15 @@ public class OpenAIService : IOpenAIService
     {
         try
         {
+            var ingredientsList = string.Join("\n", ingredients.Select(i => $"- {i.Name}: {i.Quantity}"));
+            
             var prompt = $@"Génère une recette complète et détaillée pour le plat suivant :
 
 Titre : {recipeTitle}
 Description : {shortDescription}
+
+Ingrédients disponibles (liste COMPLÈTE et OBLIGATOIRE à utiliser) :
+{ingredientsList}
 
 Génère une recette détaillée avec :
 1. Une introduction (2-3 phrases)
@@ -111,10 +116,12 @@ Génère une recette détaillée avec :
 3. Des conseils de cuisson si nécessaire
 4. Des suggestions de présentation
 
-IMPORTANT : 
+IMPORTANT - CONTRAINTES OBLIGATOIRES : 
 - N'inclus PAS le titre du plat car il est déjà affiché ailleurs.
 - N'inclus PAS la liste des ingrédients car elle est déjà affichée ailleurs.
 - Commence directement par l'introduction sans répéter le titre.
+- Tu DOIS utiliser UNIQUEMENT les ingrédients listés ci-dessus. N'ajoute AUCUN ingrédient qui ne figure pas dans cette liste.
+- La recette doit être cohérente avec les ingrédients fournis. Si un ingrédient est mentionné dans la liste, il DOIT être utilisé dans les étapes de préparation.
 
 Rédige la recette de manière claire, pédagogique et appétissante. Utilise un ton chaleureux et convivial. 
 Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (-) et des listes numérotées (1., 2., etc.).";
@@ -379,9 +386,20 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         
         sb.AppendLine($"\nAliments de saison: {(parameters.SeasonalFoods ? "Oui" : "Non")}");
         
-        if (parameters.TotalKcalPerDish.HasValue)
+        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
         {
-            sb.AppendLine($"\nCalories maximales par plat: {parameters.TotalKcalPerDish.Value} kcal");
+            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"\nCalories par plat: entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal");
+            }
+            else if (parameters.MinKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"\nCalories minimales par plat: {parameters.MinKcalPerDish.Value} kcal");
+            }
+            else if (parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"\nCalories maximales par plat: {parameters.MaxKcalPerDish.Value} kcal");
+            }
         }
         
         if (parameters.WeightedOptions.Any(kvp => kvp.Value.HasValue))
@@ -458,7 +476,24 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         {
             sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
         }
+        sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
+        sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
+        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
+        {
+            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"- Chaque recette DOIT avoir entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal. C'est une contrainte stricte.");
+            }
+            else if (parameters.MinKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"- Chaque recette DOIT avoir au minimum {parameters.MinKcalPerDish.Value} kcal. C'est une contrainte stricte.");
+            }
+            else if (parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"- Chaque recette DOIT avoir au maximum {parameters.MaxKcalPerDish.Value} kcal. C'est une contrainte stricte.");
+            }
+        }
         
         return sb.ToString();
     }
@@ -480,12 +515,29 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             sb.AppendLine($"Temps de cuisson maximum: {parameters.MaxCookingTime.Value.TotalMinutes} minutes");
         }
         
+        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
+        {
+            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"Calories par plat: entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal");
+            }
+            else if (parameters.MinKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"Calories minimales par plat: {parameters.MinKcalPerDish.Value} kcal");
+            }
+            else if (parameters.MaxKcalPerDish.HasValue)
+            {
+                sb.AppendLine($"Calories maximales par plat: {parameters.MaxKcalPerDish.Value} kcal");
+            }
+        }
+        
         if (parameters.BannedFoods.Any())
         {
             sb.AppendLine($"Aliments à bannir: {string.Join(", ", parameters.BannedFoods)}");
         }
         
-        sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la même structure que les recettes du menu.");
+        sb.AppendLine("\nIMPORTANT: Tu DOIS générer UNIQUEMENT UN SEUL plat (pas un tableau, pas plusieurs plats).");
+        sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
         sb.AppendLine(@"{
   ""titre"": ""Titre du plat"",
   ""description"": ""Description courte"",
@@ -501,7 +553,11 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
     }
   ]
 }");
-        sb.AppendLine("\nIMPORTANT: Tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
+        sb.AppendLine("\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
+        sb.AppendLine("- Tu DOIS générer UNIQUEMENT UN SEUL plat (un objet JSON unique, pas un tableau).");
+        sb.AppendLine("- Tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
+        sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
+        sb.AppendLine("- Tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important.");
         
         return sb.ToString();
     }

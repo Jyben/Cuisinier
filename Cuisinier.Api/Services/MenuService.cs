@@ -119,9 +119,52 @@ public class MenuService : IMenuService
                 }
 
                 // Add newly generated recipes
+                // Check for duplicates in favorites before adding
+                var allFavorites = await _context.Favorites
+                    .Include(f => f.Ingredients)
+                    .ToListAsync();
+
                 foreach (var recipeResponse in menuResponse.Recipes)
                 {
                     var recipe = recipeResponse.ToEntity(menu.Id);
+                    
+                    // Check if this recipe already exists in favorites
+                    var normalizedTitle = recipe.Title.Trim().ToLower();
+                    var matchingFavorites = allFavorites
+                        .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+                        .ToList();
+
+                    foreach (var favorite in matchingFavorites)
+                    {
+                        // Check if ingredients match
+                        if (favorite.Ingredients.Count != recipe.Ingredients.Count)
+                            continue;
+
+                        var favoriteIngredients = favorite.Ingredients
+                            .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                            .OrderBy(i => i.Name)
+                            .ThenBy(i => i.Quantity)
+                            .ToList();
+
+                        var recipeIngredients = recipe.Ingredients
+                            .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                            .OrderBy(i => i.Name)
+                            .ThenBy(i => i.Quantity)
+                            .ToList();
+
+                        if (favoriteIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                        {
+                            // Mark as from database and link to favorite
+                            recipe.IsFromDatabase = true;
+                            recipe.OriginalDishId = favorite.Id;
+                            _logger.LogInformation(
+                                "Recipe '{Title}' matches existing favorite (ID: {FavoriteId})",
+                                recipe.Title,
+                                favorite.Id);
+                            break;
+                        }
+                    }
+                    
                     menu.Recipes.Add(recipe);
                 }
 
@@ -377,8 +420,14 @@ public class MenuService : IMenuService
             .Include(r => r.Ingredients)
             .FirstOrDefaultAsync(r => r.Id == newRecipeId);
 
+        // Invalidate cache
+        _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
+        _cache.Remove(AllMenusCacheKey);
+        _cache.Remove($"Recipe_{recipeId}");
+        _cache.Remove($"Recipe_{newRecipeId}");
+
         _logger.LogInformation(
-            "Recipe replaced successfully. MenuId: {MenuId}, OldRecipeId: {OldRecipeId}, NewRecipeId: {NewRecipeId}",
+            "Recipe replaced successfully and cache invalidated. MenuId: {MenuId}, OldRecipeId: {OldRecipeId}, NewRecipeId: {NewRecipeId}",
             menuId,
             recipeId,
             newRecipeId);
@@ -435,6 +484,97 @@ public class MenuService : IMenuService
             ?? throw new InvalidOperationException("Failed to load recipe after ingredient replacement");
     }
 
+    public async Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId)
+    {
+        _logger.LogInformation("Adding favorite to menu. MenuId: {MenuId}, FavoriteId: {FavoriteId}", menuId, favoriteId);
+
+        var menu = await _context.Menus
+            .FirstOrDefaultAsync(m => m.Id == menuId);
+
+        if (menu == null)
+        {
+            throw new KeyNotFoundException($"Menu {menuId} not found");
+        }
+
+        var favorite = await _context.Favorites
+            .Include(f => f.Ingredients)
+            .FirstOrDefaultAsync(f => f.Id == favoriteId);
+
+        if (favorite == null)
+        {
+            throw new KeyNotFoundException($"Favorite {favoriteId} not found");
+        }
+
+        // Convert favorite to recipe
+        var recipe = new Recipe
+        {
+            MenuId = menuId,
+            Title = favorite.Title,
+            Description = favorite.Description,
+            CompleteDescription = favorite.CompleteDescription,
+            DetailedRecipe = favorite.DetailedRecipe,
+            ImageUrl = favorite.ImageUrl,
+            PreparationTime = favorite.PreparationTime,
+            CookingTime = favorite.CookingTime,
+            Kcal = favorite.Kcal,
+            Servings = favorite.Servings,
+            IsFromDatabase = true,
+            OriginalDishId = null, // OriginalDishId references Recipes table, not Favorites
+            Ingredients = favorite.Ingredients.Select(i => new RecipeIngredient
+            {
+                Name = i.Name,
+                Quantity = i.Quantity,
+                Category = i.Category
+            }).ToList()
+        };
+
+        _context.Recipes.Add(recipe);
+        await _context.SaveChangesAsync();
+
+        // Load with ingredients for response
+        await _context.Entry(recipe)
+            .Collection(r => r.Ingredients)
+            .LoadAsync();
+
+        // Update shopping list if it exists (menu already validated)
+        var existingShoppingList = await _context.ShoppingLists
+            .Include(sl => sl.Items)
+            .FirstOrDefaultAsync(sl => sl.MenuId == menuId);
+
+        if (existingShoppingList != null)
+        {
+            // Add ingredients from favorite recipe to shopping list
+            foreach (var ingredient in recipe.Ingredients)
+            {
+                var shoppingListItem = new ShoppingListItem
+                {
+                    ShoppingListId = existingShoppingList.Id,
+                    Name = ingredient.Name,
+                    Quantity = ingredient.Quantity,
+                    Category = ingredient.Category,
+                    IsManuallyAdded = false
+                };
+
+                _context.ShoppingListItems.Add(shoppingListItem);
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Shopping list updated with favorite ingredients. MenuId: {MenuId}, ItemsAdded: {ItemsCount}",
+                menuId,
+                recipe.Ingredients.Count);
+        }
+
+        // Invalidate cache
+        _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
+        _cache.Remove(AllMenusCacheKey);
+
+        _logger.LogInformation("Favorite added to menu successfully. MenuId: {MenuId}, RecipeId: {RecipeId}", menuId, recipe.Id);
+
+        return recipe.ToResponse();
+    }
+
     public async Task DeleteRecipeAsync(int menuId, int recipeId)
     {
         _logger.LogInformation(
@@ -486,7 +626,7 @@ public class MenuService : IMenuService
         _logger.LogInformation("Menu deleted successfully and cache invalidated. MenuId: {MenuId}", menuId);
     }
 
-    public async Task<MenuResponse> ValidateMenuAsync(int menuId)
+    public async Task<MenuResponse> ValidateMenuAsync(int menuId, ValidateMenuRequest? request = null)
     {
         _logger.LogInformation("Validating menu. MenuId: {MenuId}", menuId);
 
@@ -500,27 +640,107 @@ public class MenuService : IMenuService
             throw new KeyNotFoundException($"Menu {menuId} not found");
         }
 
+        // Add favorites if provided
+        if (request?.FavoriteIds != null && request.FavoriteIds.Any())
+        {
+            var favorites = await _context.Favorites
+                .Include(f => f.Ingredients)
+                .Where(f => request.FavoriteIds.Contains(f.Id))
+                .ToListAsync();
+
+            foreach (var favorite in favorites)
+            {
+                var recipe = new Recipe
+                {
+                    MenuId = menuId,
+                    Title = favorite.Title,
+                    Description = favorite.Description,
+                    CompleteDescription = favorite.CompleteDescription,
+                    DetailedRecipe = favorite.DetailedRecipe,
+                    ImageUrl = favorite.ImageUrl,
+                    PreparationTime = favorite.PreparationTime,
+                    CookingTime = favorite.CookingTime,
+                    Kcal = favorite.Kcal,
+                    Servings = favorite.Servings,
+                    IsFromDatabase = true,
+                    OriginalDishId = null, // OriginalDishId references Recipes table, not Favorites
+                    Ingredients = favorite.Ingredients.Select(i => new RecipeIngredient
+                    {
+                        Name = i.Name,
+                        Quantity = i.Quantity,
+                        Category = i.Category
+                    }).ToList()
+                };
+
+                menu.Recipes.Add(recipe);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Reload menu with new recipes
+            menu = await _context.Menus
+                .Include(m => m.Recipes)
+                    .ThenInclude(r => r.Ingredients)
+                .FirstOrDefaultAsync(m => m.Id == menuId);
+
+            if (menu == null)
+            {
+                throw new InvalidOperationException("Failed to reload menu after adding favorites");
+            }
+
+            _logger.LogInformation(
+                "Added {Count} favorites to menu. MenuId: {MenuId}",
+                favorites.Count,
+                menuId);
+        }
+
         // Check if shopping list already exists
         var existingShoppingList = await _context.ShoppingLists
             .FirstOrDefaultAsync(l => l.MenuId == menuId);
 
         if (existingShoppingList == null)
         {
-            // Generate shopping list synchronously (user needs it immediately)
-            var recipesResponse = menu.Recipes.Select(r => r.ToResponse()).ToList();
-            var shoppingListResponse = await _openAIService.GenerateShoppingListAsync(recipesResponse);
+            // Separate recipes: favorites (from database) and LLM-generated recipes
+            var favoriteRecipes = menu.Recipes.Where(r => r.IsFromDatabase).ToList();
+            var llmRecipes = menu.Recipes.Where(r => !r.IsFromDatabase).ToList();
 
-            var shoppingList = new ShoppingList
+            // Generate shopping list from LLM only for non-favorite recipes
+            var shoppingListItems = new List<ShoppingListItem>();
+            
+            if (llmRecipes.Any())
             {
-                MenuId = menuId,
-                CreationDate = DateTime.UtcNow,
-                Items = shoppingListResponse.Items.Select(i => new ShoppingListItem
+                var llmRecipesResponse = llmRecipes.Select(r => r.ToResponse()).ToList();
+                var shoppingListResponse = await _openAIService.GenerateShoppingListAsync(llmRecipesResponse);
+                
+                shoppingListItems.AddRange(shoppingListResponse.Items.Select(i => new ShoppingListItem
                 {
                     Name = i.Name,
                     Quantity = i.Quantity,
                     Category = i.Category,
                     IsManuallyAdded = i.IsManuallyAdded
-                }).ToList()
+                }));
+            }
+
+            // Add ingredients from favorite recipes manually (not via LLM)
+            foreach (var favoriteRecipe in favoriteRecipes)
+            {
+                foreach (var ingredient in favoriteRecipe.Ingredients)
+                {
+                    shoppingListItems.Add(new ShoppingListItem
+                    {
+                        Name = ingredient.Name,
+                        Quantity = ingredient.Quantity,
+                        Category = ingredient.Category,
+                        IsManuallyAdded = false
+                    });
+                }
+            }
+
+            var shoppingList = new ShoppingList
+            {
+                MenuId = menuId,
+                CreationDate = DateTime.UtcNow,
+                Items = shoppingListItems
             };
 
             _context.ShoppingLists.Add(shoppingList);
@@ -534,26 +754,45 @@ public class MenuService : IMenuService
             // Invalidate cache when menu is validated (it becomes a validated menu)
             _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
             _cache.Remove(AllMenusCacheKey);
+
+            // Launch detailed recipe generation in background (only for non-favorite recipes without detail)
+            var recipesWithoutDetail = menu.Recipes
+                .Where(r => !r.IsFromDatabase && string.IsNullOrEmpty(r.DetailedRecipe))
+                .Select(r => r.Id)
+                .ToList();
+
+            if (recipesWithoutDetail.Any())
+            {
+                _logger.LogInformation(
+                    "Launching background detailed recipe generation. MenuId: {MenuId}, RecipesCount: {RecipesCount}",
+                    menuId,
+                    recipesWithoutDetail.Count);
+                await _backgroundRecipeService.GenerateDetailedRecipesAsync(menuId, recipesWithoutDetail);
+            }
         }
-
-        // Launch detailed recipe generation in background
-        var recipesWithoutDetail = menu.Recipes
-            .Where(r => string.IsNullOrEmpty(r.DetailedRecipe))
-            .Select(r => r.Id)
-            .ToList();
-
-        if (recipesWithoutDetail.Any())
+        else
         {
             _logger.LogInformation(
-                "Launching background detailed recipe generation. MenuId: {MenuId}, RecipesCount: {RecipesCount}",
-                menuId,
-                recipesWithoutDetail.Count);
-            await _backgroundRecipeService.GenerateDetailedRecipesAsync(menuId, recipesWithoutDetail);
+                "Menu already validated. Shopping list exists. MenuId: {MenuId}",
+                menuId);
         }
 
         _logger.LogInformation("Menu validated successfully. MenuId: {MenuId}", menuId);
 
         return menu.ToResponse();
+    }
+
+    private class IngredientEqualityComparer : IEqualityComparer<(string Name, string Quantity)>
+    {
+        public bool Equals((string Name, string Quantity) x, (string Name, string Quantity) y)
+        {
+            return x.Name == y.Name && x.Quantity == y.Quantity;
+        }
+
+        public int GetHashCode((string Name, string Quantity) obj)
+        {
+            return HashCode.Combine(obj.Name, obj.Quantity);
+        }
     }
 }
 

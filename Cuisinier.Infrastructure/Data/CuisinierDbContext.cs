@@ -15,6 +15,8 @@ public class CuisinierDbContext : DbContext
     public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
     public DbSet<ShoppingListItem> ShoppingListItems => Set<ShoppingListItem>();
     public DbSet<MenuSettings> MenuSettings => Set<MenuSettings>();
+    public DbSet<Favorite> Favorites => Set<Favorite>();
+    public DbSet<FavoriteIngredient> FavoriteIngredients => Set<FavoriteIngredient>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -77,6 +79,23 @@ public class CuisinierDbContext : DbContext
             entity.HasKey(e => e.Id);
             // Disable IDENTITY to allow explicit insertion of Id = 1
             entity.Property(e => e.Id).ValueGeneratedNever();
+        });
+
+        // Favorite configuration
+        modelBuilder.Entity<Favorite>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Title);
+            entity.HasMany(e => e.Ingredients)
+                  .WithOne(e => e.Favorite)
+                  .HasForeignKey(e => e.FavoriteId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // FavoriteIngredient configuration
+        modelBuilder.Entity<FavoriteIngredient>(entity =>
+        {
+            entity.HasKey(e => e.Id);
         });
     }
 }

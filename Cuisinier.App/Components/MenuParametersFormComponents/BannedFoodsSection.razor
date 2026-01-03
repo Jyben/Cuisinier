@@ -24,7 +24,7 @@
 <MudGrid Class="mt-2">
     <MudItem xs="12" sm="10">
         <MudTextField Value="@NewFood" 
-                     ValueChanged="@((string value) => NewFood = value)"
+                     ValueChanged="@((string value) => NewFoodChanged.InvokeAsync(value))"
                      Label="Ajouter un aliment à bannir"
                      Variant="Variant.Outlined"
                      OnKeyDown="@((KeyboardEventArgs e) => { if (e.Key == "Enter" || e.Key == "NumpadEnter") OnAdd.InvokeAsync(); })" />

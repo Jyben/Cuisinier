@@ -59,6 +59,13 @@ public static class MenuEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status400BadRequest);
 
+        group.MapPost("/{menuId:int}/favorite/{favoriteId:int}", AddFavoriteToMenu)
+            .WithName("AddFavoriteToMenu")
+            .WithSummary("Add a favorite recipe to a menu")
+            .WithDescription("Adds a favorite recipe to an existing menu.")
+            .Produces<RecipeResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapDelete("/{menuId:int}/recipe/{recipeId:int}", DeleteRecipe)
             .WithName("DeleteRecipe")
             .WithSummary("Delete a recipe from a menu")
@@ -144,6 +151,15 @@ public static class MenuEndpoints
         return Results.Ok(recipe);
     }
 
+    private static async Task<IResult> AddFavoriteToMenu(
+        int menuId,
+        int favoriteId,
+        IMenuService menuService)
+    {
+        var recipe = await menuService.AddFavoriteToMenuAsync(menuId, favoriteId);
+        return Results.Ok(recipe);
+    }
+
     private static async Task<IResult> DeleteRecipe(
         int menuId,
         int recipeId,
@@ -163,9 +179,10 @@ public static class MenuEndpoints
 
     private static async Task<IResult> ValidateMenu(
         int menuId,
+        ValidateMenuRequest? request,
         IMenuService menuService)
     {
-        var menu = await menuService.ValidateMenuAsync(menuId);
+        var menu = await menuService.ValidateMenuAsync(menuId, request);
         return Results.Ok(menu);
     }
 }

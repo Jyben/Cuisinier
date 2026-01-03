@@ -12,32 +12,32 @@
                   Color="Color.Primary" />
         @if (LimitPreparation)
         {
-            <MudNumericField T="int" 
-                             Value="@PreparationMinutes"
-                             ValueChanged="@((int value) => PreparationMinutesChanged.InvokeAsync(value))"
-                             Label="Temps maximum (minutes)"
-                             Min="5"
-                             Max="300"
-                             Variant="Variant.Outlined"
-                             Class="mt-2" />
+            <MudNumericField T="int?" 
+                          Value="@MaxPreparationMinutes"
+                          ValueChanged="@((int? value) => MaxPreparationMinutesChanged.InvokeAsync(value))"
+                          Label="Temps maximum (minutes)"
+                          Min="5"
+                          Max="300"
+                          Variant="Variant.Outlined"
+                          Class="mt-2" />
         }
     </MudItem>
     <MudItem xs="12" md="6">
         <MudSwitch T="bool" 
-                  Value="@LimitCooking"
+                  Value="@LimitCooking" 
                   ValueChanged="@((bool value) => LimitCookingChanged.InvokeAsync(value))"
                   Label="Limiter le temps de cuisson"
                   Color="Color.Primary" />
         @if (LimitCooking)
         {
-            <MudNumericField T="int" 
-                             Value="@CookingMinutes"
-                             ValueChanged="@((int value) => CookingMinutesChanged.InvokeAsync(value))"
-                             Label="Temps maximum (minutes)"
-                             Min="5"
-                             Max="600"
-                             Variant="Variant.Outlined"
-                             Class="mt-2" />
+            <MudNumericField T="int?" 
+                          Value="@MaxCookingMinutes"
+                          ValueChanged="@((int? value) => MaxCookingMinutesChanged.InvokeAsync(value))"
+                          Label="Temps maximum (minutes)"
+                          Min="5"
+                          Max="600"
+                          Variant="Variant.Outlined"
+                          Class="mt-2" />
         }
     </MudItem>
 </MudGrid>
@@ -45,12 +45,11 @@
 @code {
     [Parameter] public bool LimitPreparation { get; set; }
     [Parameter] public EventCallback<bool> LimitPreparationChanged { get; set; }
-    [Parameter] public int PreparationMinutes { get; set; } = 15;
-    [Parameter] public EventCallback<int> PreparationMinutesChanged { get; set; }
+    [Parameter] public int? MaxPreparationMinutes { get; set; }
+    [Parameter] public EventCallback<int?> MaxPreparationMinutesChanged { get; set; }
     
     [Parameter] public bool LimitCooking { get; set; }
     [Parameter] public EventCallback<bool> LimitCookingChanged { get; set; }
-    [Parameter] public int CookingMinutes { get; set; } = 30;
-    [Parameter] public EventCallback<int> CookingMinutesChanged { get; set; }
+    [Parameter] public int? MaxCookingMinutes { get; set; }
+    [Parameter] public EventCallback<int?> MaxCookingMinutesChanged { get; set; }
 }
-

@@ -1,0 +1,53 @@
+@using MudBlazor
+
+<MudCard Elevation="0" Class="add-favorite-card" @onclick="HandleCardClick">
+    <MudCardContent Class="pa-3" Style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Outlined.AddCircleOutline" Size="Size.Large" Style="color: rgba(0,0,0,0.38);" />
+            <MudButton 
+                Variant="Variant.Outlined" 
+                Color="Color.Primary" 
+                StartIcon="@Icons.Material.Filled.Favorite"
+                Size="Size.Medium">
+                Ajouter un favori
+            </MudButton>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public EventCallback OnAddClick { get; set; }
+
+    private async Task HandleCardClick()
+    {
+        await OnAddClick.InvokeAsync();
+    }
+}
+
+<style>
+    .add-favorite-card {
+        border: 2px dashed rgba(0, 0, 0, 0.12);
+        border-radius: var(--mud-default-borderradius, 4px);
+        background-color: transparent !important;
+        height: 100%;
+        min-height: 450px;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .add-favorite-card .mud-card-content {
+        background-color: transparent !important;
+        min-height: 450px;
+    }
+
+    .add-favorite-card:hover {
+        border-color: var(--mud-palette-primary, #1976d2);
+        background-color: rgba(25, 118, 210, 0.04) !important;
+        cursor: pointer;
+    }
+
+    .add-favorite-card:hover .mud-card-content {
+        background-color: rgba(25, 118, 210, 0.04) !important;
+    }
+</style>

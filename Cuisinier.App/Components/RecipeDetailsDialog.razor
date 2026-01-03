@@ -17,7 +17,7 @@
             <MudText Typo="Typo.body1" Class="mb-4" Style="color: rgba(0,0,0,0.7);">@Recipe.Description</MudText>
         }
 
-        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-4 recipe-info-chips">
             <MudTooltip Text="Nombre de personnes">
                 <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
                     <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
@@ -109,6 +109,15 @@
 }
 
 <style>
+    .recipe-info-chips {
+        flex-wrap: wrap;
+    }
+
+    .recipe-info-chips .mud-chip {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
     .recette-detaillee-content {
         line-height: 1.7;
         color: rgba(0, 0, 0, 0.87);

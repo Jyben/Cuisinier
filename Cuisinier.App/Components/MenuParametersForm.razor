@@ -74,17 +74,21 @@ else
                 <TimeConstraintsSection 
                     LimitPreparation="_limitPreparationTime"
                     LimitPreparationChanged="@((bool value) => _limitPreparationTime = value)"
-                    PreparationMinutes="_preparationTimeMinutes"
-                    PreparationMinutesChanged="@((int value) => _preparationTimeMinutes = value)"
+                    MaxPreparationMinutes="_maxPreparationTimeMinutes"
+                    MaxPreparationMinutesChanged="@((int? value) => _maxPreparationTimeMinutes = value)"
                     LimitCooking="_limitCookingTime"
                     LimitCookingChanged="@((bool value) => _limitCookingTime = value)"
-                    CookingMinutes="_cookingTimeMinutes"
-                    CookingMinutesChanged="@((int value) => _cookingTimeMinutes = value)" />
+                    MaxCookingMinutes="_maxCookingTimeMinutes"
+                    MaxCookingMinutesChanged="@((int? value) => _maxCookingTimeMinutes = value)" />
 
                 <!-- Nombre de kcal par plat -->
                 <NutritionSection 
-                    Value="Parameters.TotalKcalPerDish"
-                    ValueChanged="@((int? value) => Parameters.TotalKcalPerDish = value)" />
+                    LimitKcal="_limitKcal"
+                    LimitKcalChanged="@((bool value) => _limitKcal = value)"
+                    MinValue="_minKcal"
+                    MinValueChanged="@((int? value) => _minKcal = value)"
+                    MaxValue="_maxKcal"
+                    MaxValueChanged="@((int? value) => _maxKcal = value)" />
 
                 <!-- Bouton de génération -->
                 <MudDivider Class="my-4" />

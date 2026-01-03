@@ -10,7 +10,8 @@ public class MenuParameters
     public Dictionary<string, int?> WeightedOptions { get; set; } = new(); // null = option not activated, 0 = none (0%), > 0 = percentage
     public TimeSpan? MaxPreparationTime { get; set; }
     public TimeSpan? MaxCookingTime { get; set; }
-    public int? TotalKcalPerDish { get; set; } // Total number of kcal per dish (optional)
+    public int? MinKcalPerDish { get; set; } // Minimum number of kcal per dish (optional)
+    public int? MaxKcalPerDish { get; set; } // Maximum number of kcal per dish (optional)
     public DateTime WeekStartDate { get; set; }
 }
 

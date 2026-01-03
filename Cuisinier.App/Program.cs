@@ -37,6 +37,14 @@ builder.Services.AddRefitClient<IShoppingListApi>()
         c.BaseAddress = new Uri(url);
     });
 
+builder.Services.AddRefitClient<IFavoriteApi>()
+    .ConfigureHttpClient((sp, c) => 
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        var url = config["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
+        c.BaseAddress = new Uri(url);
+    });
+
 // MudBlazor
 builder.Services.AddMudServices();
 

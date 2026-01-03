@@ -26,6 +26,9 @@ public interface IMenuApi
     [Post("/api/menu/{menuId}/recipe/{recipeId}/ingredient/replace")]
     Task<RecipeResponse> ReplaceIngredientAsync(int menuId, int recipeId, [Body] IngredientReplacementRequest request);
     
+    [Post("/api/menu/{menuId}/favorite/{favoriteId}")]
+    Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId);
+    
     [Delete("/api/menu/{menuId}/recipe/{recipeId}")]
     Task DeleteRecipeAsync(int menuId, int recipeId);
     
@@ -33,6 +36,6 @@ public interface IMenuApi
     Task DeleteMenuAsync(int menuId);
     
     [Post("/api/menu/{menuId}/validate")]
-    Task<MenuResponse> ValidateMenuAsync(int menuId);
+    Task<MenuResponse> ValidateMenuAsync(int menuId, [Body] ValidateMenuRequest? request = null);
 }
 

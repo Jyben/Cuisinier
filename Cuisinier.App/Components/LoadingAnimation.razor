@@ -2,11 +2,32 @@
 
 <div class="loading-container">
     <div class="loading-content">
-        <div class="shapes-container">
-            <div class="shape shape-1"></div>
-            <div class="shape shape-2"></div>
-            <div class="shape shape-3"></div>
-            <div class="shape shape-4"></div>
+        <div class="cooking-scene">
+            <!-- Poêle -->
+            <div class="pan">
+                <div class="pan-body"></div>
+            </div>
+            
+            <!-- Flammes/Chaleur -->
+            <div class="flames">
+                <div class="flame flame-1"></div>
+                <div class="flame flame-2"></div>
+                <div class="flame flame-3"></div>
+            </div>
+            
+            <!-- Ingrédients qui sautent -->
+            <div class="ingredients">
+                <div class="ingredient ingredient-1"></div>
+                <div class="ingredient ingredient-2"></div>
+                <div class="ingredient ingredient-3"></div>
+            </div>
+            
+            <!-- Vapeur -->
+            <div class="steam">
+                <div class="steam-cloud steam-1"></div>
+                <div class="steam-cloud steam-2"></div>
+                <div class="steam-cloud steam-3"></div>
+            </div>
         </div>
         <MudText Typo="Typo.h6" Class="loading-text">@Title</MudText>
         <MudText Typo="Typo.body2" Class="loading-subtext">@Subtitle</MudText>
@@ -34,79 +55,220 @@
         gap: 2rem;
     }
 
-    .shapes-container {
+    .cooking-scene {
         position: relative;
-        width: 120px;
-        height: 120px;
+        width: 200px;
+        height: 180px;
         display: flex;
         justify-content: center;
-        align-items: center;
+        align-items: flex-end;
     }
 
-    .shape {
+    /* Poêle */
+    .pan {
+        position: relative;
+        width: 140px;
+        height: 70px;
+        z-index: 10;
+    }
+
+    .pan-body {
+        width: 140px;
+        height: 70px;
+        background: linear-gradient(to bottom, #c0c0c0 0%, #808080 100%);
+        border-radius: 0 0 70px 70px;
+        border: 3px solid #606060;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        position: relative;
+    }
+
+    .pan-body::before {
+        content: '';
         position: absolute;
-        border-radius: 50%;
-        background: linear-gradient(135deg, var(--mud-palette-primary, #1976d2) 0%, var(--mud-palette-secondary, #dc004e) 100%);
-        opacity: 0.8;
-        animation: stack-animation 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        top: -5px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 130px;
+        height: 5px;
+        background: #808080;
+        border-radius: 5px 5px 0 0;
     }
 
-    .shape-1 {
-        width: 80px;
-        height: 80px;
-        animation-delay: 0s;
-        z-index: 4;
-    }
-
-    .shape-2 {
-        width: 65px;
-        height: 65px;
-        animation-delay: 0.15s;
-        z-index: 3;
-        background: linear-gradient(135deg, var(--mud-palette-secondary, #dc004e) 0%, var(--mud-palette-tertiary, #9c27b0) 100%);
-    }
-
-    .shape-3 {
-        width: 50px;
-        height: 50px;
-        animation-delay: 0.3s;
-        z-index: 2;
-        background: linear-gradient(135deg, var(--mud-palette-tertiary, #9c27b0) 0%, var(--mud-palette-primary, #1976d2) 100%);
-    }
-
-    .shape-4 {
-        width: 35px;
-        height: 35px;
-        animation-delay: 0.45s;
+    /* Flammes */
+    .flames {
+        position: absolute;
+        bottom: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 140px;
+        height: 40px;
         z-index: 1;
-        background: linear-gradient(135deg, var(--mud-palette-primary, #1976d2) 0%, var(--mud-palette-success, #4caf50) 100%);
     }
 
-    @@keyframes stack-animation {
-        0% {
-            transform: translateY(0) scale(1) rotate(0deg);
-            opacity: 0.7;
+    .flame {
+        position: absolute;
+        bottom: 0;
+        border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        opacity: 0.8;
+        animation: flame-flicker 1.5s ease-in-out infinite;
+    }
+
+    .flame-1 {
+        left: 10px;
+        width: 30px;
+        height: 35px;
+        background: linear-gradient(to top, #ff6b35 0%, #ff8c42 50%, #ffaa5c 100%);
+        animation-delay: 0s;
+    }
+
+    .flame-2 {
+        left: calc(50% - 17.5px);
+        width: 35px;
+        height: 40px;
+        background: linear-gradient(to top, #ff4500 0%, #ff6b35 50%, #ff8c42 100%);
+        animation-delay: 0.3s;
+    }
+
+    .flame-3 {
+        right: 10px;
+        width: 28px;
+        height: 32px;
+        background: linear-gradient(to top, #ff6b35 0%, #ff8c42 50%, #ffaa5c 100%);
+        animation-delay: 0.6s;
+    }
+
+    @@keyframes flame-flicker {
+        0%, 100% {
+            transform: scaleY(1) scaleX(1);
+            opacity: 0.8;
         }
-        20% {
-            transform: translateY(-25px) scale(1.15) rotate(5deg);
-            opacity: 1;
-        }
-        40% {
-            transform: translateY(-15px) scale(1.08) rotate(-3deg);
+        25% {
+            transform: scaleY(1.1) scaleX(0.95);
             opacity: 0.9;
         }
-        60% {
-            transform: translateY(-20px) scale(1.12) rotate(2deg);
-            opacity: 0.95;
-        }
-        80% {
-            transform: translateY(-10px) scale(1.05) rotate(-1deg);
+        50% {
+            transform: scaleY(0.95) scaleX(1.05);
             opacity: 0.85;
         }
+        75% {
+            transform: scaleY(1.05) scaleX(0.98);
+            opacity: 0.9;
+        }
+    }
+
+    /* Ingrédients */
+    .ingredients {
+        position: absolute;
+        top: 45px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+        height: 60px;
+        z-index: 5;
+    }
+
+    .ingredient {
+        position: absolute;
+        border-radius: 50%;
+        animation: bounce 1.2s ease-in-out infinite;
+    }
+
+    .ingredient-1 {
+        left: 15%;
+        width: 20px;
+        height: 20px;
+        background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        animation-delay: 0s;
+    }
+
+    .ingredient-2 {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 18px;
+        height: 18px;
+        background: linear-gradient(135deg, #ffaa5c 0%, #ffc982 100%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        animation-delay: 0.4s;
+    }
+
+    .ingredient-3 {
+        right: 15%;
+        width: 16px;
+        height: 16px;
+        background: linear-gradient(135deg, #ff8c42 0%, #ffaa5c 100%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        animation-delay: 0.8s;
+    }
+
+    @@keyframes bounce {
+        0%, 100% {
+            transform: translateY(0) translateX(0) rotate(0deg);
+        }
+        25% {
+            transform: translateY(-15px) translateX(5px) rotate(15deg);
+        }
+        50% {
+            transform: translateY(-10px) translateX(-3px) rotate(-10deg);
+        }
+        75% {
+            transform: translateY(-12px) translateX(3px) rotate(8deg);
+        }
+    }
+
+    /* Vapeur */
+    .steam {
+        position: absolute;
+        top: -40px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100px;
+        height: 60px;
+        z-index: 3;
+    }
+
+    .steam-cloud {
+        position: absolute;
+        background: rgba(255, 255, 255, 0.6);
+        border-radius: 50%;
+        opacity: 0.5;
+        animation: steam-rise 2s ease-out infinite;
+    }
+
+    .steam-1 {
+        left: 20px;
+        width: 25px;
+        height: 25px;
+        animation-delay: 0s;
+    }
+
+    .steam-2 {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 30px;
+        height: 30px;
+        animation-delay: 0.5s;
+    }
+
+    .steam-3 {
+        right: 20px;
+        width: 22px;
+        height: 22px;
+        animation-delay: 1s;
+    }
+
+    @@keyframes steam-rise {
+        0% {
+            transform: translateY(0) translateX(0) scale(1);
+            opacity: 0.6;
+        }
+        50% {
+            transform: translateY(-30px) translateX(5px) scale(1.2);
+            opacity: 0.4;
+        }
         100% {
-            transform: translateY(0) scale(1) rotate(0deg);
-            opacity: 0.7;
+            transform: translateY(-60px) translateX(-5px) scale(1.5);
+            opacity: 0;
         }
     }
 

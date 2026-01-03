@@ -5,6 +5,7 @@ using Cuisinier.Infrastructure.Mappings;
 using Cuisinier.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Caching.Memory;
 using Cuisinier.Api.Hubs;
 
 namespace Cuisinier.Api.Services;
@@ -13,15 +14,21 @@ public class BackgroundRecipeService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHubContext<RecipeHub> _hubContext;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<BackgroundRecipeService> _logger;
+
+    private const string MenuCacheKeyPrefix = "Menu_";
+    private const string AllMenusCacheKey = "Menu_All";
 
     public BackgroundRecipeService(
         IServiceScopeFactory scopeFactory,
         IHubContext<RecipeHub> hubContext,
+        IMemoryCache cache,
         ILogger<BackgroundRecipeService> logger)
     {
         _scopeFactory = scopeFactory;
         _hubContext = hubContext;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -32,59 +39,9 @@ public class BackgroundRecipeService
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var context = scope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
-                var openAIService = scope.ServiceProvider.GetRequiredService<IOpenAIService>();
-
-                foreach (var recipeId in recipeIds)
-                {
-                    try
-                    {
-                        var recipe = await context.Recipes
-                            .Include(r => r.Ingredients)
-                            .FirstOrDefaultAsync(r => r.Id == recipeId);
-
-                        if (recipe == null || !string.IsNullOrEmpty(recipe.DetailedRecipe))
-                        {
-                            continue;
-                        }
-
-                        var recipeResponse = recipe.ToResponse();
-                        var detailedRecipe = await openAIService.GenerateDetailedRecipeAsync(
-                            recipe.Title,
-                            recipeResponse.Ingredients,
-                            recipe.Description
-                        );
-
-                        recipe.DetailedRecipe = detailedRecipe;
-                        context.Entry(recipe).Property(r => r.DetailedRecipe).IsModified = true;
-                        await context.SaveChangesAsync();
-
-                        // Detach entity to avoid context issues
-                        context.Entry(recipe).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
-
-                        // Reload recipe with all relationships for mapping
-                        var completeRecipe = await context.Recipes
-                            .Include(r => r.Ingredients)
-                            .AsNoTracking()
-                            .FirstOrDefaultAsync(r => r.Id == recipeId);
-
-                        if (completeRecipe != null)
-                        {
-                            // Send update via SignalR
-                            var updatedRecipe = completeRecipe.ToResponse();
-                            await _hubContext.Clients.Group($"menu-{menuId}")
-                                .SendAsync("RecipeDetailedGenerated", updatedRecipe);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error during detailed recipe generation for {RecipeId}", recipeId);
-                        // Send error notification
-                        await _hubContext.Clients.Group($"menu-{menuId}")
-                            .SendAsync("RecipeGenerationError", recipeId);
-                    }
-                }
+                // Generate all recipes in parallel
+                var tasks = recipeIds.Select(recipeId => GenerateSingleRecipeAsync(menuId, recipeId));
+                await Task.WhenAll(tasks);
             }
             catch (Exception ex)
             {
@@ -93,6 +50,62 @@ public class BackgroundRecipeService
         });
 
         return Task.CompletedTask;
+    }
+
+    private async Task GenerateSingleRecipeAsync(int menuId, int recipeId)
+    {
+        try
+        {
+            // Each recipe gets its own scope to avoid DbContext threading issues
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
+            var openAIService = scope.ServiceProvider.GetRequiredService<IOpenAIService>();
+
+            var recipe = await context.Recipes
+                .Include(r => r.Ingredients)
+                .FirstOrDefaultAsync(r => r.Id == recipeId);
+
+            if (recipe == null || !string.IsNullOrEmpty(recipe.DetailedRecipe))
+            {
+                return;
+            }
+
+            var recipeResponse = recipe.ToResponse();
+            var detailedRecipe = await openAIService.GenerateDetailedRecipeAsync(
+                recipe.Title,
+                recipeResponse.Ingredients,
+                recipe.Description
+            );
+
+            recipe.DetailedRecipe = detailedRecipe;
+            context.Entry(recipe).Property(r => r.DetailedRecipe).IsModified = true;
+            await context.SaveChangesAsync();
+
+            // Reload recipe with all relationships for mapping
+            var completeRecipe = await context.Recipes
+                .Include(r => r.Ingredients)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == recipeId);
+
+            if (completeRecipe != null)
+            {
+                // Invalidate cache to ensure fresh data on next load
+                _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
+                _cache.Remove(AllMenusCacheKey);
+                
+                // Send update via SignalR
+                var updatedRecipe = completeRecipe.ToResponse();
+                await _hubContext.Clients.Group($"menu-{menuId}")
+                    .SendAsync("RecipeDetailedGenerated", updatedRecipe);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during detailed recipe generation for {RecipeId}", recipeId);
+            // Send error notification
+            await _hubContext.Clients.Group($"menu-{menuId}")
+                .SendAsync("RecipeGenerationError", recipeId);
+        }
     }
 
     public Task GenerateShoppingListAsync(int menuId)

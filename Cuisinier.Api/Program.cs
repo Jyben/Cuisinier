@@ -132,6 +132,9 @@ if (app.Environment.IsDevelopment())
 // Correlation ID Middleware (must be early in pipeline, before exception handling)
 app.UseMiddleware<CorrelationIdMiddleware>();
 
+// Content Language Middleware (set French language for all responses)
+app.UseMiddleware<ContentLanguageMiddleware>();
+
 // Global Exception Handling Middleware (must be early in pipeline)
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
@@ -157,5 +160,6 @@ app.MapHub<RecipeHub>("/recipeHub");
 app.MapMenuEndpoints();
 app.MapRecipeEndpoints();
 app.MapShoppingListEndpoints();
+app.MapFavoriteEndpoints();
 
 app.Run();
