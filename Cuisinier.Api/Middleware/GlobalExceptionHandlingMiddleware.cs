@@ -48,13 +48,27 @@ public class GlobalExceptionHandlingMiddleware
         {
             case ArgumentNullException nullEx:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
-                errorResponse.Message = $"Required parameter is missing: {nullEx.ParamName}";
+                if (_environment.IsDevelopment())
+                {
+                    errorResponse.Message = $"Required parameter is missing: {nullEx.ParamName}";
+                }
+                else
+                {
+                    errorResponse.Message = "Required parameter is missing.";
+                }
                 _logger.LogWarning(nullEx, "Null argument: {ParamName}", nullEx.ParamName);
                 break;
 
             case ArgumentException argEx:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
-                errorResponse.Message = argEx.Message;
+                if (_environment.IsDevelopment())
+                {
+                    errorResponse.Message = argEx.Message;
+                }
+                else
+                {
+                    errorResponse.Message = "Invalid request parameters provided.";
+                }
                 _logger.LogWarning(argEx, "Invalid argument: {Message}", argEx.Message);
                 break;
 
@@ -83,7 +97,15 @@ public class GlobalExceptionHandlingMiddleware
 
             case InvalidOperationException invalidOp:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
-                errorResponse.Message = invalidOp.Message;
+                if (_environment.IsDevelopment())
+                {
+                    errorResponse.Message = invalidOp.Message;
+                    errorResponse.Details = invalidOp.ToString();
+                }
+                else
+                {
+                    errorResponse.Message = "The requested operation could not be completed.";
+                }
                 _logger.LogWarning(invalidOp, "Invalid operation: {Message}", invalidOp.Message);
                 break;
 
