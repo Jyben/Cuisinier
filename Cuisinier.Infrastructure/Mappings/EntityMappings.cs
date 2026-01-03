@@ -27,7 +27,10 @@ public static class EntityMappings
             WeekStartDate = menu.WeekStartDate,
             CreationDate = menu.CreationDate,
             GenerationParameters = parameters,
-            Recipes = menu.Recipes.Select(r => r.ToResponse()).ToList()
+            Recipes = menu.Recipes
+                .OrderBy(r => r.Servings)
+                .Select(r => r.ToResponse())
+                .ToList()
         };
     }
 
