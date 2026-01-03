@@ -174,19 +174,6 @@ public static class ShoppingListEndpoints
                 recipe.Description);
 
             recipe.CompleteDescription = completeDescription;
-
-            // Generate image if it doesn't exist (non-critical operation, continue on error)
-            if (string.IsNullOrEmpty(recipe.ImageUrl))
-            {
-                try
-                {
-                    recipe.ImageUrl = await openAIService.GenerateDishImageAsync(recipe.Title, recipe.Description);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Error during image generation for {Title}", recipe.Title);
-                }
-            }
         }
 
         await context.SaveChangesAsync();

@@ -379,8 +379,6 @@ public class MenuService : IMenuService
         var recipeResponse = recipe.ToResponse();
         var newRecipeResponse = await _openAIService.ReplaceRecipeAsync(request.Parameters, recipeResponse);
 
-        int newRecipeId = 0;
-        
         // Use execution strategy to wrap transaction (required when EnableRetryOnFailure is enabled)
         var strategy = _context.Database.CreateExecutionStrategy();
         
@@ -389,18 +387,33 @@ public class MenuService : IMenuService
             await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Remove old recipe
-                _context.Recipes.Remove(recipe);
+                // Remove old ingredients (they will be replaced)
+                _context.RecipeIngredients.RemoveRange(recipe.Ingredients);
                 await _context.SaveChangesAsync();
 
-                // Add new one
-                var newRecipe = newRecipeResponse.ToEntity(menuId);
-                _context.Recipes.Add(newRecipe);
+                // Update the existing recipe with new data (keeping the same ID to preserve order)
+                recipe.Title = newRecipeResponse.Title;
+                recipe.Description = newRecipeResponse.Description;
+                recipe.CompleteDescription = newRecipeResponse.CompleteDescription;
+                recipe.DetailedRecipe = newRecipeResponse.DetailedRecipe;
+                recipe.ImageUrl = newRecipeResponse.ImageUrl;
+                recipe.PreparationTime = newRecipeResponse.PreparationTime;
+                recipe.CookingTime = newRecipeResponse.CookingTime;
+                recipe.Kcal = newRecipeResponse.Kcal;
+                recipe.Servings = newRecipeResponse.Servings;
+                recipe.IsFromDatabase = newRecipeResponse.IsFromDatabase;
+                recipe.OriginalDishId = newRecipeResponse.OriginalDishId;
+
+                // Add new ingredients
+                recipe.Ingredients = newRecipeResponse.Ingredients.Select(i => new RecipeIngredient
+                {
+                    RecipeId = recipe.Id,
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Category = i.Category
+                }).ToList();
+
                 await _context.SaveChangesAsync();
-
-                // Capture the ID before commit
-                newRecipeId = newRecipe.Id;
-
                 await transaction.CommitAsync();
             }
             catch
@@ -410,27 +423,20 @@ public class MenuService : IMenuService
             }
         });
 
-        if (newRecipeId == 0)
-        {
-            throw new InvalidOperationException("Failed to create new recipe in transaction");
-        }
-
-        // Load with relationships for response (outside transaction)
+        // Reload with relationships for response (outside transaction)
         var completeRecipe = await _context.Recipes
             .Include(r => r.Ingredients)
-            .FirstOrDefaultAsync(r => r.Id == newRecipeId);
+            .FirstOrDefaultAsync(r => r.Id == recipeId);
 
         // Invalidate cache
         _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
         _cache.Remove(AllMenusCacheKey);
         _cache.Remove($"Recipe_{recipeId}");
-        _cache.Remove($"Recipe_{newRecipeId}");
 
         _logger.LogInformation(
-            "Recipe replaced successfully and cache invalidated. MenuId: {MenuId}, OldRecipeId: {OldRecipeId}, NewRecipeId: {NewRecipeId}",
+            "Recipe replaced successfully and cache invalidated. MenuId: {MenuId}, RecipeId: {RecipeId}",
             menuId,
-            recipeId,
-            newRecipeId);
+            recipeId);
 
         return completeRecipe?.ToResponse() 
             ?? throw new InvalidOperationException("Failed to load replaced recipe");
@@ -582,7 +588,9 @@ public class MenuService : IMenuService
             menuId,
             recipeId);
 
+        // Load recipe with ingredients before deletion
         var recipe = await _context.Recipes
+            .Include(r => r.Ingredients)
             .FirstOrDefaultAsync(r => r.Id == recipeId && r.MenuId == menuId);
 
         if (recipe == null)
@@ -590,8 +598,52 @@ public class MenuService : IMenuService
             throw new KeyNotFoundException($"Recipe {recipeId} not found in menu {menuId}");
         }
 
+        // Store ingredients before deletion
+        var recipeIngredients = recipe.Ingredients.ToList();
+
+        // Remove recipe
         _context.Recipes.Remove(recipe);
         await _context.SaveChangesAsync();
+
+        // Remove ingredients from shopping list if it exists
+        var shoppingList = await _context.ShoppingLists
+            .Include(sl => sl.Items)
+            .FirstOrDefaultAsync(sl => sl.MenuId == menuId);
+
+        if (shoppingList != null && recipeIngredients.Any())
+        {
+            var itemsRemoved = 0;
+
+            // For each ingredient in the deleted recipe, try to find and remove matching items
+            // This works best for favorites added individually, but may be less precise for LLM-grouped ingredients
+            foreach (var ingredient in recipeIngredients)
+            {
+                // Find items that match the ingredient (name and category, not manually added)
+                // Use case-insensitive comparison for name
+                var matchingItems = shoppingList.Items
+                    .Where(item => 
+                        !item.IsManuallyAdded &&
+                        item.Name.Trim().Equals(ingredient.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        item.Category.Trim().Equals(ingredient.Category.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var item in matchingItems)
+                {
+                    _context.ShoppingListItems.Remove(item);
+                    itemsRemoved++;
+                }
+            }
+
+            if (itemsRemoved > 0)
+            {
+                await _context.SaveChangesAsync();
+                _logger.LogInformation(
+                    "Removed {ItemsCount} items from shopping list after recipe deletion. MenuId: {MenuId}, RecipeId: {RecipeId}",
+                    itemsRemoved,
+                    menuId,
+                    recipeId);
+            }
+        }
 
         // Invalidate cache
         _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");

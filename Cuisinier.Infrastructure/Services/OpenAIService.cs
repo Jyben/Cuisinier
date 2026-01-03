@@ -6,21 +6,18 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Cuisinier.Core.DTOs;
 using OpenAI.Chat;
-using OpenAI.Images;
 
 namespace Cuisinier.Infrastructure.Services;
 
 public class OpenAIService : IOpenAIService
 {
     private readonly ChatClient _chatClient;
-    private readonly ImageClient _imageClient;
     private readonly ILogger<OpenAIService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public OpenAIService(string apiKey, ILogger<OpenAIService> logger)
     {
         _chatClient = new ChatClient(model: "gpt-4o-mini", apiKey: apiKey);
-        _imageClient = new ImageClient(model: "dall-e-3", apiKey: apiKey);
         _logger = logger;
         
         _jsonOptions = new JsonSerializerOptions
@@ -151,55 +148,6 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during detailed recipe generation for {Title}", recipeTitle);
-            throw;
-        }
-    }
-
-    public async Task<string> GenerateDishImageAsync(string dishTitle, string description)
-    {
-        try
-        {
-            var imagePrompt = $"Plat culinaire français: {dishTitle}. {description}. Photo de qualité professionnelle, éclairage naturel, style moderne et appétissant, fond neutre.";
-
-            _logger.LogInformation("Image generation for {Title} - Prompt: {Prompt}", dishTitle, imagePrompt);
-
-            // Use default options for now
-            // Note: The exact structure of OpenAI.NET 2.8.0 API may require adjustments
-            var imageResult = await _imageClient.GenerateImageAsync(imagePrompt);
-            var image = imageResult.Value;
-            
-            // Try different ways to access URL according to API structure
-            // This part may require adjustments according to exact OpenAI.NET 2.8.0 documentation
-            string? imageUrl = null;
-            
-            // Try to access via different possible properties
-            var imageType = image.GetType();
-            var urlProperty = imageType.GetProperty("Url") ?? imageType.GetProperty("UrlString") ?? imageType.GetProperty("B64Json");
-            if (urlProperty != null && urlProperty.GetValue(image) is string url)
-            {
-                imageUrl = url;
-            }
-            else if (imageType.GetProperty("Items")?.GetValue(image) is System.Collections.IEnumerable items)
-            {
-                var firstItem = items.Cast<object>().FirstOrDefault();
-                if (firstItem != null)
-                {
-                    var itemType = firstItem.GetType();
-                    var itemUrlProperty = itemType.GetProperty("Url") ?? itemType.GetProperty("UrlString");
-                    imageUrl = itemUrlProperty?.GetValue(firstItem)?.ToString();
-                }
-            }
-            
-            if (string.IsNullOrEmpty(imageUrl))
-            {
-                throw new InvalidOperationException("Unable to extract URL from generated image. Check OpenAI.NET 2.8.0 API structure.");
-            }
-
-            return imageUrl;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during image generation for {Title}", dishTitle);
             throw;
         }
     }
