@@ -82,8 +82,8 @@ public class OpenAIService : IOpenAIService
             // Vérifier qu'on a bien le nombre attendu
             if (allRecipes.Count != totalDishes)
             {
-                _logger.LogWarning(
-                    "Expected {Expected} dishes but generated {Actual}",
+                _logger.LogError(
+                    "Mismatch between requested and generated dishes. Expected {Expected} dishes but generated {Actual}. This likely indicates an AI generation issue; consider retrying menu generation or notifying the user.",
                     totalDishes,
                     allRecipes.Count);
             }
