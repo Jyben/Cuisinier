@@ -59,8 +59,7 @@ public class BackgroundMenuService
                     await using var transaction = await context.Database.BeginTransactionAsync();
                     try
                     {
-                        // Save parameters in MenuSettings entity (independent of the menu)
-                        await SaveParametersInternalAsync(context, request.Parameters);
+                        // Parameters are already saved in StartMenuGenerationAsync, no need to save again
 
                         // Get menu (it should already exist with the provided ID)
                         var menu = await context.Menus
@@ -207,40 +206,6 @@ public class BackgroundMenuService
         });
 
         return Task.CompletedTask;
-    }
-
-    private async Task SaveParametersInternalAsync(CuisinierDbContext context, MenuParameters parameters)
-    {
-        var jsonOptions = Helpers.JsonOptionsHelper.GetSerializationOptions();
-        
-        // Create a complete deep copy via serialization/deserialization to avoid any reference issues
-        var parametersJson = System.Text.Json.JsonSerializer.Serialize(parameters, jsonOptions);
-        var parametersForSave = System.Text.Json.JsonSerializer.Deserialize<MenuParameters>(parametersJson, jsonOptions) 
-            ?? new MenuParameters();
-        
-        // Reset the date so it's not saved (it will be recalculated each time)
-        parametersForSave.WeekStartDate = default;
-
-        // Get or create MenuSettings record (ID = 1)
-        var menuSettings = await context.MenuSettings.FindAsync(1);
-        
-        if (menuSettings == null)
-        {
-            menuSettings = new MenuSettings
-            {
-                Id = 1,
-                ParametersJson = System.Text.Json.JsonSerializer.Serialize(parametersForSave, jsonOptions),
-                ModificationDate = DateTime.UtcNow
-            };
-            context.MenuSettings.Add(menuSettings);
-        }
-        else
-        {
-            menuSettings.ParametersJson = System.Text.Json.JsonSerializer.Serialize(parametersForSave, jsonOptions);
-            menuSettings.ModificationDate = DateTime.UtcNow;
-        }
-
-        await context.SaveChangesAsync();
     }
 
     private class IngredientEqualityComparer : IEqualityComparer<(string Name, string Quantity)>

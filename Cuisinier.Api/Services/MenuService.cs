@@ -68,6 +68,9 @@ public class MenuService : IMenuService
                     await _context.SaveChangesAsync();
                 }
 
+                // Save parameters in MenuSettings entity (independent of the menu)
+                await SaveParametersInternalAsync(request.Parameters);
+
                 // Create a temporary menu (will be populated by background service)
                 var menu = new Menu
                 {
