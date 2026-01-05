@@ -46,37 +46,33 @@ public class OpenAIService : IOpenAIService
             // Si le nombre total est <= 8, on fait un seul appel
             if (totalDishes <= maxDishesPerBatch)
             {
-                var menuResponse = await GenerateMenuBatchAsync(parameters, totalDishes, new List<string>());
+                var menuResponse = await GenerateMenuBatchAsync(parameters, parameters.NumberOfDishes, new List<string>());
                 return menuResponse;
             }
 
-            // Sinon, on découpe en plusieurs appels
-            var remainingDishes = totalDishes;
+            // Sinon, on découpe en plusieurs appels en préservant la distribution des portions
+            var batches = DistributeDishesIntoBatches(parameters.NumberOfDishes, maxDishesPerBatch);
             var generatedTitles = new List<string>();
 
-            while (remainingDishes > 0)
+            foreach (var batch in batches)
             {
-                var dishesInThisBatch = Math.Min(remainingDishes, maxDishesPerBatch);
+                var dishesInThisBatch = batch.Sum(d => d.NumberOfDishes);
                 
                 _logger.LogInformation(
-                    "Generating batch: {DishesInBatch} dishes (remaining: {Remaining}, already generated: {AlreadyGenerated})",
+                    "Generating batch: {DishesInBatch} dishes (already generated: {AlreadyGenerated})",
                     dishesInThisBatch,
-                    remainingDishes,
                     generatedTitles.Count);
 
-                var batchResponse = await GenerateMenuBatchAsync(parameters, dishesInThisBatch, generatedTitles);
+                var batchResponse = await GenerateMenuBatchAsync(parameters, batch, generatedTitles);
                 
                 allRecipes.AddRange(batchResponse.Recipes);
                 
                 // Ajouter les titres générés pour éviter les doublons
                 generatedTitles.AddRange(batchResponse.Recipes.Select(r => r.Title));
                 
-                remainingDishes -= batchResponse.Recipes.Count;
-                
                 _logger.LogInformation(
-                    "Batch completed: {Generated} dishes generated, {Remaining} remaining",
-                    batchResponse.Recipes.Count,
-                    remainingDishes);
+                    "Batch completed: {Generated} dishes generated",
+                    batchResponse.Recipes.Count);
             }
 
             // Vérifier qu'on a bien le nombre attendu
@@ -102,9 +98,55 @@ public class OpenAIService : IOpenAIService
         }
     }
 
+    private List<List<NumberOfDishesDto>> DistributeDishesIntoBatches(
+        List<NumberOfDishesDto> numberOfDishes, 
+        int maxDishesPerBatch)
+    {
+        var batches = new List<List<NumberOfDishesDto>>();
+        var currentBatch = new List<NumberOfDishesDto>();
+        var currentBatchTotal = 0;
+
+        foreach (var dishGroup in numberOfDishes)
+        {
+            var remainingInGroup = dishGroup.NumberOfDishes;
+
+            while (remainingInGroup > 0)
+            {
+                var availableInBatch = maxDishesPerBatch - currentBatchTotal;
+                
+                if (availableInBatch == 0)
+                {
+                    // Current batch is full, start a new one
+                    batches.Add(currentBatch);
+                    currentBatch = new List<NumberOfDishesDto>();
+                    currentBatchTotal = 0;
+                    availableInBatch = maxDishesPerBatch;
+                }
+
+                // Add as many dishes from this group as possible to the current batch
+                var dishesToAdd = Math.Min(remainingInGroup, availableInBatch);
+                currentBatch.Add(new NumberOfDishesDto
+                {
+                    NumberOfDishes = dishesToAdd,
+                    Servings = dishGroup.Servings
+                });
+                currentBatchTotal += dishesToAdd;
+                remainingInGroup -= dishesToAdd;
+            }
+        }
+
+        // Add the last batch if it has any dishes
+        if (currentBatch.Any())
+        {
+            batches.Add(currentBatch);
+        }
+
+        return batches;
+    }
+
     private async Task<MenuResponse> GenerateMenuBatchAsync(
         MenuParameters parameters, 
-        int dishesToGenerate, 
+        List<NumberOfDishesDto> dishesToGenerate, 
         List<string> generatedTitles)
     {
         var prompt = BuildMenuPrompt(parameters, dishesToGenerate, generatedTitles);
@@ -352,18 +394,18 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         }
     }
 
-    private string BuildMenuPrompt(MenuParameters parameters, int dishesToGenerate, List<string> alreadyGeneratedTitles)
+    private string BuildMenuPrompt(MenuParameters parameters, List<NumberOfDishesDto> dishesToGenerate, List<string> alreadyGeneratedTitles)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Génère un menu de la semaine avec les paramètres suivants:");
         sb.AppendLine($"Date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd}");
         
-        var totalDishes = parameters.NumberOfDishes.Any() ? parameters.NumberOfDishes.Sum(item => item.NumberOfDishes) : 0;
+        var totalDishes = dishesToGenerate.Sum(d => d.NumberOfDishes);
         
         // Si c'est un batch, indiquer le nombre de plats pour ce batch
-        if (dishesToGenerate > 0)
+        if (totalDishes > 0)
         {
-            sb.AppendLine($"\nIMPORTANT: Tu DOIS générer EXACTEMENT {dishesToGenerate} plat(s) dans ce batch.");
+            sb.AppendLine($"\nIMPORTANT: Tu DOIS générer EXACTEMENT {totalDishes} plat(s) dans ce batch.");
         }
         
         // Si des plats ont déjà été générés, les lister pour éviter les doublons
@@ -377,10 +419,10 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             sb.AppendLine("\nIMPORTANT: Génère des plats COMPLÈTEMENT DIFFÉRENTS de ceux listés ci-dessus. Ne répète aucun titre, aucune variante similaire.");
         }
         
-        if (parameters.NumberOfDishes.Any())
+        if (dishesToGenerate.Any())
         {
             sb.AppendLine("\nNombre de plats:");
-            foreach (var item in parameters.NumberOfDishes)
+            foreach (var item in dishesToGenerate)
             {
                 sb.AppendLine($"- {item.NumberOfDishes} plats pour {item.Servings} personne(s)");
             }
@@ -505,9 +547,9 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
   ]
 }");
         sb.AppendLine($"\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
-        if (dishesToGenerate > 0)
+        if (totalDishes > 0)
         {
-            sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {dishesToGenerate} recette(s). C'est une contrainte stricte et non négociable.");
+            sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
         }
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
