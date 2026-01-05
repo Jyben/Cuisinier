@@ -6,7 +6,7 @@ namespace Cuisinier.App.Services;
 public interface IMenuApi
 {
     [Post("/api/menu/generate")]
-    Task<MenuResponse> GenerateMenuAsync([Body] MenuGenerationRequest request);
+    Task<MenuGenerationResponse> GenerateMenuAsync([Body] MenuGenerationRequest request);
     
     [Get("/api/menu/{id}")]
     Task<MenuResponse> GetMenuAsync(int id);

@@ -5,6 +5,7 @@ namespace Cuisinier.Api.Services;
 public interface IMenuService
 {
     Task<MenuResponse> GenerateMenuAsync(MenuGenerationRequest request);
+    Task<int> StartMenuGenerationAsync(MenuGenerationRequest request);
     Task<MenuResponse?> GetMenuAsync(int id);
     Task<List<MenuResponse>> GetAllMenusAsync();
     Task<MenuParameters?> GetLastParametersAsync();
