@@ -82,8 +82,8 @@ public class OpenAIService : IOpenAIService
             // Vérifier qu'on a bien le nombre attendu
             if (allRecipes.Count != totalDishes)
             {
-                _logger.LogWarning(
-                    "Expected {Expected} dishes but generated {Actual}",
+                _logger.LogError(
+                    "Mismatch between requested and generated dishes. Expected {Expected} dishes but generated {Actual}. This likely indicates an AI generation issue; consider retrying menu generation or notifying the user.",
                     totalDishes,
                     allRecipes.Count);
             }
@@ -105,9 +105,9 @@ public class OpenAIService : IOpenAIService
     private async Task<MenuResponse> GenerateMenuBatchAsync(
         MenuParameters parameters, 
         int dishesToGenerate, 
-        List<string> alreadyGeneratedTitles)
+        List<string> generatedTitles)
     {
-        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, alreadyGeneratedTitles);
+        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, generatedTitles);
         
         var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
         

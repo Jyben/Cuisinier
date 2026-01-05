@@ -83,8 +83,63 @@ services:
       cp -r /tmp/publish/wwwroot/* /out
       "
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cuisinier-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - cuisinier-network
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: cuisinier-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - cuisinier-network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: cuisinier-promtail
+    volumes:
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - cuisinier-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cuisinier-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - cuisinier-network
+    restart: unless-stopped
+
 volumes:
   cuisinier-db-data:
+  prometheus-data:
+  loki-data:
+  grafana-data:
 
 networks:
   cuisinier-network:
