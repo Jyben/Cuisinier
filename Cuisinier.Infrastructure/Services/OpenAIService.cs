@@ -105,9 +105,9 @@ public class OpenAIService : IOpenAIService
     private async Task<MenuResponse> GenerateMenuBatchAsync(
         MenuParameters parameters, 
         int dishesToGenerate, 
-        List<string> alreadyGeneratedTitles)
+        List<string> generatedTitles)
     {
-        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, alreadyGeneratedTitles);
+        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, generatedTitles);
         
         var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
         
