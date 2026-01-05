@@ -34,7 +34,7 @@ server {
         # WebSocket timeout: 1 hour allows for long-running recipe generation sessions
         # while preventing indefinite resource consumption. Connections will be
         # re-established automatically if needed for longer sessions.
-        proxy_read_timeout 3600s;
+        proxy_read_timeout 1h;
     }
 
     listen 443 ssl; # managed by Certbot
