@@ -206,15 +206,14 @@ public class BackgroundMenuService
                     using var cleanupScope = _scopeFactory.CreateScope();
                     var cleanupContext = cleanupScope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
                     
-                    var failedMenu = await cleanupContext.Menus
-                        .Include(m => m.Recipes)
-                        .FirstOrDefaultAsync(m => m.Id == menuId);
+                    // Check if menu has any recipes before loading the full menu
+                    var hasRecipes = await cleanupContext.Recipes.AnyAsync(r => r.MenuId == menuId);
                     
-                    if (failedMenu != null)
+                    if (!hasRecipes)
                     {
-                        // Only delete if the menu has no recipes (transaction was rolled back)
-                        // This ensures we don't accidentally delete a partially completed menu
-                        if (!failedMenu.Recipes.Any())
+                        var failedMenu = await cleanupContext.Menus.FindAsync(menuId);
+                        
+                        if (failedMenu != null)
                         {
                             cleanupContext.Menus.Remove(failedMenu);
                             
@@ -225,21 +224,20 @@ public class BackgroundMenuService
                                     "Cleaned up temporary menu after generation failure. MenuId: {MenuId}",
                                     menuId);
                             }
-                            catch (DbUpdateConcurrencyException concurrencyEx)
+                            catch (Exception saveEx)
                             {
                                 _logger.LogWarning(
-                                    concurrencyEx,
-                                    "Menu was already deleted during cleanup. MenuId: {MenuId}",
+                                    saveEx,
+                                    "Failed to save menu deletion (possibly already deleted). MenuId: {MenuId}",
                                     menuId);
                             }
                         }
-                        else
-                        {
-                            _logger.LogWarning(
-                                "Menu has recipes despite failure, not cleaning up. MenuId: {MenuId}, RecipesCount: {RecipesCount}",
-                                menuId,
-                                failedMenu.Recipes.Count);
-                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Menu has recipes despite failure, not cleaning up. MenuId: {MenuId}",
+                            menuId);
                     }
                 }
                 catch (Exception cleanupEx)
