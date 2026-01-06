@@ -199,6 +199,31 @@ public class BackgroundMenuService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during menu generation for MenuId: {MenuId}", menuId);
+                
+                // Clean up temporary menu record on failure
+                try
+                {
+                    using var cleanupScope = _scopeFactory.CreateScope();
+                    var cleanupContext = cleanupScope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
+                    
+                    var failedMenu = await cleanupContext.Menus.FindAsync(menuId);
+                    if (failedMenu != null)
+                    {
+                        cleanupContext.Menus.Remove(failedMenu);
+                        await cleanupContext.SaveChangesAsync();
+                        _logger.LogInformation(
+                            "Cleaned up temporary menu after generation failure. MenuId: {MenuId}",
+                            menuId);
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogError(
+                        cleanupEx,
+                        "Failed to clean up temporary menu after generation failure. MenuId: {MenuId}",
+                        menuId);
+                }
+                
                 // Send error notification
                 await _hubContext.Clients.Group($"menu-{menuId}")
                     .SendAsync("MenuGenerationError", menuId);
