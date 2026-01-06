@@ -32,7 +32,7 @@ public class BackgroundMenuService
         _logger = logger;
     }
 
-    public Task GenerateMenuAsync(int menuId, MenuGenerationRequest request)
+    public void StartGenerateMenuInBackground(int menuId, MenuGenerationRequest request)
     {
         // Launch in background without waiting
         _ = Task.Run(async () =>
@@ -204,8 +204,6 @@ public class BackgroundMenuService
                     .SendAsync("MenuGenerationError", menuId);
             }
         });
-
-        return Task.CompletedTask;
     }
 
     private class IngredientEqualityComparer : IEqualityComparer<(string Name, string Quantity)>
