@@ -39,7 +39,7 @@ public static class EntityMappings
         return new RecipeResponse
         {
             Id = recipe.Id,
-            MenuId = recipe.MenuId,
+            MenuId = recipe.MenuId ?? 0,
             Title = recipe.Title,
             Description = recipe.Description,
             CompleteDescription = recipe.CompleteDescription,
@@ -89,7 +89,7 @@ public static class EntityMappings
         };
     }
 
-    public static Recipe ToEntity(this RecipeResponse recipeResponse, int menuId)
+    public static Recipe ToEntity(this RecipeResponse recipeResponse, int? menuId = null)
     {
         var recipe = new Recipe
         {
@@ -119,6 +119,43 @@ public static class EntityMappings
         }
 
         return recipe;
+    }
+
+    public static DishResponse ToResponse(this Dish dish)
+    {
+        return new DishResponse
+        {
+            Id = dish.Id,
+            Title = dish.Title,
+            Description = dish.Description,
+            CompleteDescription = dish.CompleteDescription,
+            DetailedRecipe = dish.DetailedRecipe,
+            ImageUrl = dish.ImageUrl,
+            PreparationTime = dish.PreparationTime,
+            CookingTime = dish.CookingTime,
+            Kcal = dish.Kcal,
+            Servings = dish.Servings,
+            CreatedAt = dish.CreatedAt,
+            UpdatedAt = dish.UpdatedAt,
+            Ingredients = dish.Ingredients.Select(i => new IngredientResponse
+            {
+                Id = i.Id,
+                Name = i.Name,
+                Quantity = i.Quantity,
+                Category = i.Category
+            }).ToList()
+        };
+    }
+
+    public static IngredientResponse ToResponse(this DishIngredient ingredient)
+    {
+        return new IngredientResponse
+        {
+            Id = ingredient.Id,
+            Name = ingredient.Name,
+            Quantity = ingredient.Quantity,
+            Category = ingredient.Category
+        };
     }
 }
 

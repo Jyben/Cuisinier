@@ -200,7 +200,10 @@ public class MenuService : IMenuService
                 }
 
                 // Add newly generated recipes
-                // Check for duplicates in favorites before adding
+                // Check for duplicates in dishes and favorites before adding
+                var allDishes = await _context.Dishes
+                    .Include(d => d.Ingredients)
+                    .ToListAsync();
                 var allFavorites = await _context.Favorites
                     .Include(f => f.Ingredients)
                     .ToListAsync();
@@ -209,19 +212,20 @@ public class MenuService : IMenuService
                 {
                     var recipe = recipeResponse.ToEntity(menu.Id);
                     
-                    // Check if this recipe already exists in favorites
+                    // Check if this recipe already exists in dishes first
                     var normalizedTitle = recipe.Title.Trim().ToLower();
-                    var matchingFavorites = allFavorites
-                        .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+                    var matchingDishes = allDishes
+                        .Where(d => d.Title.Trim().ToLower() == normalizedTitle)
                         .ToList();
 
-                    foreach (var favorite in matchingFavorites)
+                    bool foundMatch = false;
+                    foreach (var dish in matchingDishes)
                     {
                         // Check if ingredients match
-                        if (favorite.Ingredients.Count != recipe.Ingredients.Count)
+                        if (dish.Ingredients.Count != recipe.Ingredients.Count)
                             continue;
 
-                        var favoriteIngredients = favorite.Ingredients
+                        var dishIngredients = dish.Ingredients
                             .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
                             .OrderBy(i => i.Name)
                             .ThenBy(i => i.Quantity)
@@ -233,17 +237,96 @@ public class MenuService : IMenuService
                             .ThenBy(i => i.Quantity)
                             .ToList();
 
-                        if (favoriteIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                        if (dishIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
                         {
-                            // Mark as from database and link to favorite
+                            // Mark as from database and link to dish
                             recipe.IsFromDatabase = true;
-                            recipe.OriginalDishId = favorite.Id;
+                            recipe.OriginalDishId = dish.Id;
+                            recipe.DishId = dish.Id;
                             _logger.LogInformation(
-                                "Recipe '{Title}' matches existing favorite (ID: {FavoriteId})",
+                                "Recipe '{Title}' matches existing dish (ID: {DishId})",
                                 recipe.Title,
-                                favorite.Id);
+                                dish.Id);
+                            foundMatch = true;
                             break;
                         }
+                    }
+
+                    // If not found in dishes, check favorites
+                    if (!foundMatch)
+                    {
+                        var matchingFavorites = allFavorites
+                            .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+                            .ToList();
+
+                        foreach (var favorite in matchingFavorites)
+                        {
+                            // Check if ingredients match
+                            if (favorite.Ingredients.Count != recipe.Ingredients.Count)
+                                continue;
+
+                            var favoriteIngredients = favorite.Ingredients
+                                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                                .OrderBy(i => i.Name)
+                                .ThenBy(i => i.Quantity)
+                                .ToList();
+
+                            var recipeIngredients = recipe.Ingredients
+                                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                                .OrderBy(i => i.Name)
+                                .ThenBy(i => i.Quantity)
+                                .ToList();
+
+                            if (favoriteIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                            {
+                                // Mark as from database and link to favorite (using OriginalDishId for backward compatibility)
+                                recipe.IsFromDatabase = true;
+                                recipe.OriginalDishId = favorite.Id;
+                                _logger.LogInformation(
+                                    "Recipe '{Title}' matches existing favorite (ID: {FavoriteId})",
+                                    recipe.Title,
+                                    favorite.Id);
+                                foundMatch = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If no match found, create a new Dish for this recipe
+                    if (!foundMatch)
+                    {
+                        var newDish = new Dish
+                        {
+                            Title = recipe.Title,
+                            Description = recipe.Description,
+                            CompleteDescription = recipe.CompleteDescription,
+                            DetailedRecipe = recipe.DetailedRecipe,
+                            ImageUrl = recipe.ImageUrl,
+                            PreparationTime = recipe.PreparationTime,
+                            CookingTime = recipe.CookingTime,
+                            Kcal = recipe.Kcal,
+                            Servings = recipe.Servings,
+                            CreatedAt = DateTime.UtcNow,
+                            Ingredients = recipe.Ingredients.Select(i => new DishIngredient
+                            {
+                                Name = i.Name,
+                                Quantity = i.Quantity,
+                                Category = i.Category
+                            }).ToList()
+                        };
+
+                        _context.Dishes.Add(newDish);
+                        await _context.SaveChangesAsync();
+
+                        // Link recipe to the new dish
+                        recipe.DishId = newDish.Id;
+                        recipe.OriginalDishId = newDish.Id;
+                        recipe.IsFromDatabase = true;
+
+                        _logger.LogInformation(
+                            "Created new dish for recipe '{Title}' (DishId: {DishId})",
+                            recipe.Title,
+                            newDish.Id);
                     }
                     
                     menu.Recipes.Add(recipe);
@@ -864,6 +947,10 @@ public class MenuService : IMenuService
                 menuId);
         }
 
+        // Ensure each recipe is linked to a Dish entity (so it appears in /dishes list).
+        // Done at validation time to also cover background generation flows and avoid persisting dishes for non-validated menus.
+        await EnsureDishesForMenuAsync(menu);
+
         // Check if shopping list already exists
         var existingShoppingList = await _context.ShoppingLists
             .FirstOrDefaultAsync(l => l.MenuId == menuId);
@@ -950,6 +1037,94 @@ public class MenuService : IMenuService
         _logger.LogInformation("Menu validated successfully. MenuId: {MenuId}", menuId);
 
         return menu.ToResponse();
+    }
+
+    private async Task EnsureDishesForMenuAsync(Menu menu)
+    {
+        var allDishes = await _context.Dishes
+            .Include(d => d.Ingredients)
+            .ToListAsync();
+
+        var anyChanges = false;
+
+        foreach (var recipe in menu.Recipes)
+        {
+            if (recipe.DishId.HasValue || recipe.Dish != null)
+                continue;
+
+            var normalizedTitle = recipe.Title.Trim().ToLower();
+            var matchingDishes = allDishes
+                .Where(d => d.Title.Trim().ToLower() == normalizedTitle)
+                .ToList();
+
+            Dish? matchedDish = null;
+            foreach (var dish in matchingDishes)
+            {
+                if (dish.Ingredients.Count != recipe.Ingredients.Count)
+                    continue;
+
+                var dishIngredients = dish.Ingredients
+                    .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                    .OrderBy(i => i.Name)
+                    .ThenBy(i => i.Quantity)
+                    .ToList();
+
+                var recipeIngredients = recipe.Ingredients
+                    .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                    .OrderBy(i => i.Name)
+                    .ThenBy(i => i.Quantity)
+                    .ToList();
+
+                if (dishIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                {
+                    matchedDish = dish;
+                    break;
+                }
+            }
+
+            if (matchedDish != null)
+            {
+                recipe.DishId = matchedDish.Id;
+                recipe.OriginalDishId ??= matchedDish.Id;
+                recipe.IsFromDatabase = true;
+                anyChanges = true;
+                continue;
+            }
+
+            var newDish = new Dish
+            {
+                Title = recipe.Title,
+                Description = recipe.Description,
+                CompleteDescription = recipe.CompleteDescription,
+                DetailedRecipe = recipe.DetailedRecipe,
+                ImageUrl = recipe.ImageUrl,
+                PreparationTime = recipe.PreparationTime,
+                CookingTime = recipe.CookingTime,
+                Kcal = recipe.Kcal,
+                Servings = recipe.Servings,
+                CreatedAt = DateTime.UtcNow,
+                Ingredients = recipe.Ingredients.Select(i => new DishIngredient
+                {
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Category = i.Category
+                }).ToList()
+            };
+
+            _context.Dishes.Add(newDish);
+            allDishes.Add(newDish);
+
+            // Link the recipe to the newly created Dish. Keep IsFromDatabase as-is (LLM recipes stay LLM).
+            recipe.Dish = newDish;
+            recipe.OriginalDish = newDish;
+
+            anyChanges = true;
+        }
+
+        if (anyChanges)
+        {
+            await _context.SaveChangesAsync();
+        }
     }
 
     private async Task<int> CheckAndMarkDuplicatesAsync(List<Recipe> recipes)

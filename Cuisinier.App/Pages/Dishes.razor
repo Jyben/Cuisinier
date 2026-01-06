@@ -1,0 +1,330 @@
+@page "/dishes"
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Core.DTOs
+@using MudBlazor
+@inject IDishApi DishApi
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Plats</PageTitle>
+
+<PageHeader Title="Tous les plats" />
+
+<MudCard Elevation="2" Class="mb-4">
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12" md="6" lg="4">
+                <MudTextField 
+                    @bind-Value="_filter.SearchTerm"
+                    DebounceInterval="400"
+                    OnDebounceIntervalElapsed="OnFiltersChanged"
+                    Label="Rechercher"
+                    Placeholder="Nom du plat, description ou ingrédient..."
+                    Variant="Variant.Outlined"
+                    Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.Search"
+                    Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6" lg="4">
+                <MudTextField 
+                    @bind-Value="_filter.IngredientName"
+                    DebounceInterval="400"
+                    OnDebounceIntervalElapsed="OnFiltersChanged"
+                    Label="Ingrédient"
+                    Placeholder="Filtrer par ingrédient..."
+                    Variant="Variant.Outlined"
+                    Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.ListAlt"
+                    Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6" lg="4">
+                <MudSelect T="string"
+                    Value="_filter.SortBy"
+                    ValueChanged="@(async v => { _filter.SortBy = v; await OnFiltersChanged(); })"
+                    Label="Trier par"
+                    Variant="Variant.Outlined"
+                    Immediate="true">
+                    <MudSelectItem Value="@((string?)null)">Date de création</MudSelectItem>
+                    <MudSelectItem Value="@("title")">Titre</MudSelectItem>
+                    <MudSelectItem Value="@("createdAt")">Date de création</MudSelectItem>
+                    <MudSelectItem Value="@("kcal")">Calories</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Class="mt-3">
+            <MudButton 
+                Variant="Variant.Outlined" 
+                Color="Color.Default"
+                OnClick="ResetFilters"
+                StartIcon="@Icons.Material.Filled.Clear">
+                Réinitialiser
+            </MudButton>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+
+@if (_dishes != null && _dishes.Any())
+{
+    <MudGrid>
+        @foreach (var dish in _dishes)
+        {
+            <MudItem xs="12" md="6" lg="4">
+                <MudCard Elevation="2" Class="dish-card">
+                    <div class="dish-card-header">
+                        @if (!string.IsNullOrEmpty(dish.ImageUrl))
+                        {
+                            <MudImage Src="@dish.ImageUrl" Alt="@dish.Title" Height="160" ObjectFit="ObjectFit.Cover" />
+                        }
+                        <MudIconButton 
+                            Icon="@Icons.Material.Filled.Edit"
+                            Size="Size.Small"
+                            Variant="Variant.Text"
+                            Color="Color.Primary"
+                            OnClick="@(() => EditDish(dish))"
+                            Class="edit-button" />
+                    </div>
+                    <MudCardContent Class="pa-3">
+                        <MudText Typo="Typo.h6" Class="mb-1" Style="font-weight: 600;">@dish.Title</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="color: rgba(0,0,0,0.6); line-height: 1.4;">@dish.Description</MudText>
+                        
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudTooltip Text="Nombre de personnes">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="color: rgba(0,0,0,0.54);" />
+                            </MudTooltip>
+                            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@dish.Servings</MudText>
+                            @if (dish.PreparationTime.HasValue)
+                            {
+                                <MudTooltip Text="Temps de préparation">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)dish.PreparationTime.Value.TotalMinutes)min</MudText>
+                            }
+                            @if (dish.CookingTime.HasValue)
+                            {
+                                <MudTooltip Text="Temps de cuisson">
+                                    <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)dish.CookingTime.Value.TotalMinutes)min</MudText>
+                            }
+                            @if (dish.Kcal.HasValue)
+                            {
+                                <MudTooltip Text="Calories">
+                                    <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Size="Size.Small" Class="ml-2 mr-1" Style="color: rgba(0,0,0,0.54);" />
+                                </MudTooltip>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@dish.Kcal.Value kcal</MudText>
+                            }
+                        </MudStack>
+                        
+                        <MudExpansionPanels>
+                            <MudExpansionPanel Text="Ingrédients" Icon="@Icons.Material.Filled.ListAlt">
+                                <div style="padding: 0; margin: 0;">
+                                    @foreach (var ingredient in dish.Ingredients)
+                                    {
+                                        <div style="padding: 2px 0; line-height: 1.2; font-size: 0.875rem;">
+                                            <span style="font-weight: 500;">@ingredient.Name</span>: <span style="color: rgba(0,0,0,0.7);">@ingredient.Quantity</span>
+                                        </div>
+                                    }
+                                </div>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    </MudCardContent>
+                    <MudCardActions Class="pa-3 pt-0">
+                        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Style="width: 100%;">
+                            <MudButton 
+                                Variant="Variant.Outlined" 
+                                Size="Size.Small" 
+                                Color="Color.Error" 
+                                OnClick="@(() => DeleteDish(dish.Id))"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                Class="action-button">
+                                Supprimer
+                            </MudButton>
+                        </MudStack>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (_totalPages > 1)
+    {
+        <MudStack Row="true" Justify="Justify.Center" Spacing="2" Class="mt-4">
+            <MudPagination 
+                Count="@_totalPages" 
+                Selected="@_filter.Page" 
+                SelectedChanged="@OnPageChanged"
+                BoundaryCount="1"
+                ShowFirstButton="true"
+                ShowLastButton="true" />
+        </MudStack>
+    }
+}
+else if (!_loading)
+{
+    <MudCard Elevation="1">
+        <MudCardContent>
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Style="padding: 3rem;">
+                <MudIcon Icon="@Icons.Material.Filled.Restaurant" Size="Size.Large" Color="Color.Default" Style="opacity: 0.5;" />
+                <MudText Typo="Typo.h6" Class="text-center">Aucun plat trouvé</MudText>
+                <MudText Typo="Typo.body2" Class="text-center" Style="color: rgba(0,0,0,0.6);">
+                    @if (!string.IsNullOrWhiteSpace(_filter.SearchTerm) || !string.IsNullOrWhiteSpace(_filter.IngredientName))
+                    {
+                        <text>Aucun plat ne correspond à vos critères de recherche</text>
+                    }
+                    else
+                    {
+                        <text>Aucun plat n'a encore été enregistré</text>
+                    }
+                </MudText>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private List<DishResponse>? _dishes;
+    private bool _loading = true;
+    private DishFilterRequest _filter = new() { Page = 1, PageSize = 20 };
+    private int _totalPages = 0;
+    private System.Threading.Timer? _searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDishes();
+    }
+
+    private async Task LoadDishes()
+    {
+        try
+        {
+            _loading = true;
+            var response = await DishApi.GetAllDishesAsync(_filter);
+            _dishes = response.Dishes;
+            _totalPages = response.TotalPages;
+        }
+        catch
+        {
+            Snackbar.Add("Impossible de charger les plats. Veuillez réessayer.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFiltersChanged()
+    {
+        _filter.Page = 1; // Reset to first page when searching
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadDishes();
+                StateHasChanged();
+            });
+        }, null, 500, Timeout.Infinite);
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _filter.Page = page;
+        await LoadDishes();
+    }
+
+    private async Task ResetFilters()
+    {
+        _filter = new DishFilterRequest { Page = 1, PageSize = 20 };
+        await LoadDishes();
+    }
+
+    private async Task EditDish(DishResponse dish)
+    {
+        // TODO: Implement edit dialog similar to EditFavoriteDialog
+        Snackbar.Add("Fonctionnalité d'édition à venir", Severity.Info);
+    }
+
+    private async Task DeleteDish(int dishId)
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer le plat" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer ce plat ?" },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await DishApi.DeleteDishAsync(dishId);
+                Snackbar.Add("Plat supprimé avec succès", Severity.Success);
+                await LoadDishes();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}
+
+<style>
+    .dish-card {
+        position: relative;
+    }
+
+    .dish-card-header {
+        position: relative;
+    }
+
+    .edit-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+        background-color: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(4px);
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .edit-button:hover {
+        background-color: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+        transition: all 0.2s ease;
+    }
+
+    .action-button {
+        text-transform: none;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+    }
+
+    /* Round bottom corners of last expansion panel */
+    .dish-card .mud-expansion-panels .mud-expansion-panel:last-child,
+    .dish-card .mud-expansion-panels .mud-expansion-panel:last-child > *,
+    .dish-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header,
+    .dish-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-content,
+    .dish-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header > * {
+        border-bottom-left-radius: var(--mud-default-borderradius, 4px) !important;
+        border-bottom-right-radius: var(--mud-default-borderradius, 4px) !important;
+    }
+</style>
