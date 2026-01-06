@@ -390,7 +390,7 @@ namespace Cuisinier.App.Components
                 _isGenerating = false;
                 _pendingMenuId = null;
                 StateHasChanged();
-                Snackbar.Add("Erreur de connexion. Veuillez réessayer.", Severity.Error);
+                Snackbar.Add("Impossible de se connecter au serveur pour suivre la génération du menu. Veuillez réessayer.", Severity.Error);
             }
         }
 
