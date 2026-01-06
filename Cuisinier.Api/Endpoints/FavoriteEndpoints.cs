@@ -45,6 +45,11 @@ public static class FavoriteEndpoints
             .WithName("CheckDuplicate")
             .WithSummary("Check if a recipe already exists in favorites")
             .Produces<bool>(StatusCodes.Status200OK);
+
+        group.MapPost("/check-duplicates-batch", CheckDuplicatesBatch)
+            .WithName("CheckDuplicatesBatch")
+            .WithSummary("Check multiple recipes for duplicates in favorites")
+            .Produces<CheckDuplicatesBatchResponse>(StatusCodes.Status200OK);
     }
 
     private static async Task<IResult> GetAllFavorites(CuisinierDbContext context)
@@ -200,6 +205,82 @@ public static class FavoriteEndpoints
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList()) != null;
 
         return Results.Ok(exists);
+    }
+
+    private static async Task<IResult> CheckDuplicatesBatch(
+        CheckDuplicatesBatchRequest request,
+        CuisinierDbContext context)
+    {
+        // Load all favorites once for better performance
+        var allFavorites = await context.Favorites
+            .Include(f => f.Ingredients)
+            .ToListAsync();
+
+        var matches = new List<RecipeDuplicateMatch>();
+
+        foreach (var recipe in request.Recipes)
+        {
+            var duplicate = CheckForDuplicateInMemory(
+                allFavorites,
+                recipe.Title,
+                recipe.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
+
+            if (duplicate != null)
+            {
+                matches.Add(new RecipeDuplicateMatch
+                {
+                    RecipeId = recipe.RecipeId,
+                    FavoriteId = duplicate.Id
+                });
+            }
+        }
+
+        var response = new CheckDuplicatesBatchResponse
+        {
+            Matches = matches
+        };
+
+        return Results.Ok(response);
+    }
+
+    private static Favorite? CheckForDuplicateInMemory(
+        List<Favorite> allFavorites,
+        string title,
+        List<(string Name, string Quantity)> ingredients)
+    {
+        // Normalize title for comparison (case-insensitive, trim)
+        var normalizedTitle = title.Trim().ToLower();
+
+        // Filter in memory (case-insensitive comparison)
+        var candidates = allFavorites
+            .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            // Check if ingredients match (same count and same name+quantity pairs)
+            if (candidate.Ingredients.Count != ingredients.Count)
+                continue;
+
+            var candidateIngredients = candidate.Ingredients
+                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                .OrderBy(i => i.Name)
+                .ThenBy(i => i.Quantity)
+                .ToList();
+
+            var requestIngredients = ingredients
+                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                .OrderBy(i => i.Name)
+                .ThenBy(i => i.Quantity)
+                .ToList();
+
+            if (candidateIngredients.SequenceEqual(requestIngredients, new IngredientComparer()))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private static async Task<Favorite?> CheckForDuplicateAsync(

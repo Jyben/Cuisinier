@@ -777,6 +777,39 @@ public class MenuService : IMenuService
             throw new KeyNotFoundException($"Menu {menuId} not found");
         }
 
+        // Check for duplicates in LLM-generated recipes before validation
+        var llmRecipesToCheck = menu.Recipes.Where(r => !r.IsFromDatabase).ToList();
+        if (llmRecipesToCheck.Any())
+        {
+            _logger.LogInformation(
+                "Checking {Count} LLM-generated recipes for duplicates in favorites. MenuId: {MenuId}",
+                llmRecipesToCheck.Count,
+                menuId);
+
+            var duplicatesFound = await CheckAndMarkDuplicatesAsync(llmRecipesToCheck);
+            
+            if (duplicatesFound > 0)
+            {
+                await _context.SaveChangesAsync();
+                
+                // Reload menu to get updated recipes
+                menu = await _context.Menus
+                    .Include(m => m.Recipes)
+                        .ThenInclude(r => r.Ingredients)
+                    .FirstOrDefaultAsync(m => m.Id == menuId);
+
+                if (menu == null)
+                {
+                    throw new InvalidOperationException("Failed to reload menu after marking duplicates");
+                }
+
+                _logger.LogInformation(
+                    "Marked {Count} LLM recipes as favorites (duplicates found). MenuId: {MenuId}",
+                    duplicatesFound,
+                    menuId);
+            }
+        }
+
         // Add favorites if provided
         if (request?.FavoriteIds != null && request.FavoriteIds.Any())
         {
@@ -917,6 +950,97 @@ public class MenuService : IMenuService
         _logger.LogInformation("Menu validated successfully. MenuId: {MenuId}", menuId);
 
         return menu.ToResponse();
+    }
+
+    private async Task<int> CheckAndMarkDuplicatesAsync(List<Recipe> recipes)
+    {
+        // Load all favorites with ingredients into memory
+        var allFavorites = await _context.Favorites
+            .Include(f => f.Ingredients)
+            .ToListAsync();
+
+        var duplicatesMarked = 0;
+
+        foreach (var recipe in recipes)
+        {
+            var duplicate = CheckForDuplicateFavorite(
+                allFavorites,
+                recipe.Title,
+                recipe.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
+
+            if (duplicate != null)
+            {
+                // Mark recipe as from database and update it with favorite data
+                recipe.IsFromDatabase = true;
+                recipe.DetailedRecipe = duplicate.DetailedRecipe;
+                recipe.CompleteDescription = duplicate.CompleteDescription;
+                recipe.ImageUrl = duplicate.ImageUrl;
+                recipe.PreparationTime = duplicate.PreparationTime;
+                recipe.CookingTime = duplicate.CookingTime;
+                recipe.Kcal = duplicate.Kcal;
+                recipe.Servings = duplicate.Servings;
+                
+                // Update ingredients from favorite (in case favorite has more complete data)
+                // Remove existing ingredients and add favorite's ingredients
+                _context.RecipeIngredients.RemoveRange(recipe.Ingredients);
+                recipe.Ingredients = duplicate.Ingredients.Select(i => new RecipeIngredient
+                {
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Category = i.Category
+                }).ToList();
+                
+                duplicatesMarked++;
+                
+                _logger.LogInformation(
+                    "Marked recipe as favorite duplicate. RecipeId: {RecipeId}, FavoriteId: {FavoriteId}, Title: {Title}",
+                    recipe.Id,
+                    duplicate.Id,
+                    recipe.Title);
+            }
+        }
+
+        return duplicatesMarked;
+    }
+
+    private Favorite? CheckForDuplicateFavorite(
+        List<Favorite> allFavorites,
+        string title,
+        List<(string Name, string Quantity)> ingredients)
+    {
+        // Normalize title for comparison (case-insensitive, trim)
+        var normalizedTitle = title.Trim().ToLower();
+
+        // Filter in memory (case-insensitive comparison)
+        var candidates = allFavorites
+            .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+            .ToList();
+
+        foreach (var candidate in candidates)
+        {
+            // Check if ingredients match (same count and same name+quantity pairs)
+            if (candidate.Ingredients.Count != ingredients.Count)
+                continue;
+
+            var candidateIngredients = candidate.Ingredients
+                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                .OrderBy(i => i.Name)
+                .ThenBy(i => i.Quantity)
+                .ToList();
+
+            var requestIngredients = ingredients
+                .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                .OrderBy(i => i.Name)
+                .ThenBy(i => i.Quantity)
+                .ToList();
+
+            if (candidateIngredients.SequenceEqual(requestIngredients, new IngredientEqualityComparer()))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private class IngredientEqualityComparer : IEqualityComparer<(string Name, string Quantity)>

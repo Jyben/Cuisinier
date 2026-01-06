@@ -2,9 +2,11 @@
 @using MudBlazor
 @using Markdig
 @using Refit
+@using Microsoft.Extensions.Logging
 @inject IDialogService DialogService
 @inject IFavoriteApi FavoriteApi
 @inject ISnackbar Snackbar
+@inject ILogger<RecipeCard> Logger
 
 <MudCard Elevation="2" Class="recette-card">
     @if (IsReplacing)
@@ -170,12 +172,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await CheckIfFavorite();
+        // Only check if favorite button is shown (not during menu generation)
+        if (ShowFavoriteButton)
+        {
+            await CheckIfFavorite();
+        }
     }
 
     protected override async Task OnParametersSetAsync()
     {
-        await CheckIfFavorite();
+        // Only check if favorite button is shown (not during menu generation)
+        if (ShowFavoriteButton)
+        {
+            await CheckIfFavorite();
+        }
     }
 
     private async Task CheckIfFavorite()
@@ -195,8 +205,9 @@
 
             _isFavorite = await FavoriteApi.CheckDuplicateAsync(checkRequest);
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogWarning(ex, "Failed to check if recipe is favorite. Title: {Title}", Recipe.Title);
             _isFavorite = false;
         }
     }
