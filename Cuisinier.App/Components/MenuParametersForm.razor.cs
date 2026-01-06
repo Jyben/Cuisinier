@@ -23,7 +23,7 @@ namespace Cuisinier.App.Components
         private bool _isGenerating = false;
         private HubConnection? _hubConnection;
         private int? _pendingMenuId = null;
-        private readonly SemaphoreSlim _connectionLock = new(1, 1);
+        private SemaphoreSlim? _connectionLock = new(1, 1);
         
         // Use DesiredFoodItem from DesiredFoodsSection component
         
@@ -319,6 +319,13 @@ namespace Cuisinier.App.Components
 
         private async Task InitializeSignalRAsync(int menuId)
         {
+            // Check if semaphore is available
+            if (_connectionLock == null)
+            {
+                Logger.LogError("Connection lock is not available, component may be disposed");
+                return;
+            }
+
             // Use a semaphore to prevent concurrent connection operations
             await _connectionLock.WaitAsync();
             try
@@ -415,12 +422,18 @@ namespace Cuisinier.App.Components
             }
             finally
             {
-                _connectionLock.Release();
+                _connectionLock?.Release();
             }
         }
 
         public async ValueTask DisposeAsync()
         {
+            // Check if semaphore is available and not already disposed
+            if (_connectionLock == null)
+            {
+                return;
+            }
+
             // Wait for any ongoing connection operations to complete
             await _connectionLock.WaitAsync();
             try
@@ -454,8 +467,10 @@ namespace Cuisinier.App.Components
             }
             finally
             {
-                _connectionLock.Release();
-                _connectionLock.Dispose();
+                var lockToDispose = _connectionLock;
+                _connectionLock = null;
+                lockToDispose.Release();
+                lockToDispose.Dispose();
             }
         }
 
