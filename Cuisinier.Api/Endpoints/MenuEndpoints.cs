@@ -103,7 +103,7 @@ public static class MenuEndpoints
         };
         
         // Launch generation in background (fire-and-forget)
-        _ = backgroundMenuService.GenerateMenuAsync(menuId, request);
+        backgroundMenuService.StartGenerateMenuInBackground(menuId, request);
         
         return Results.Ok(response);
     }
