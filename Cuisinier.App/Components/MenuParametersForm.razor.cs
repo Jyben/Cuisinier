@@ -313,12 +313,11 @@ namespace Cuisinier.App.Components
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error starting menu generation");
-                _isGenerating = false;
-                StateHasChanged();
+                ResetGenerationState();
                 Snackbar.Add("Une erreur est survenue lors de la génération du menu. Veuillez réessayer.", Severity.Error);
                 
                 // Clean up SignalR connection on error
-                if (_hubConnection != null)
+                if (_hubConnection is not null)
                 {
                     try
                     {
@@ -355,9 +354,7 @@ namespace Cuisinier.App.Components
             if (string.IsNullOrWhiteSpace(apiBaseUrl))
             {
                 Logger.LogError("Unable to determine API base URL for SignalR hub connection. Both configuration 'ApiBaseUrl' and navigation base URI are null or empty.");
-                _isGenerating = false;
-                _pendingMenuId = null;
-                StateHasChanged();
+                ResetGenerationState();
                 Snackbar.Add("Erreur de configuration du serveur. Veuillez contacter l'administrateur ou réessayer plus tard.", Severity.Error);
                 throw new InvalidOperationException("Unable to determine API base URL for SignalR hub connection");
             }
@@ -404,9 +401,7 @@ namespace Cuisinier.App.Components
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error connecting to SignalR hub");
-                _isGenerating = false;
-                _pendingMenuId = null;
-                StateHasChanged();
+                ResetGenerationState();
                 Snackbar.Add("Impossible de se connecter au serveur pour suivre la génération du menu. Veuillez réessayer.", Severity.Error);
                 throw;
             }
@@ -414,7 +409,7 @@ namespace Cuisinier.App.Components
 
         private async Task JoinMenuGroupAsync(int menuId)
         {
-            if (_hubConnection == null)
+            if (_hubConnection is null)
             {
                 Logger.LogError("Cannot join menu group: SignalR connection is not initialized");
                 throw new InvalidOperationException("SignalR connection is not initialized");
@@ -427,12 +422,17 @@ namespace Cuisinier.App.Components
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Error joining menu group");
-                _isGenerating = false;
-                _pendingMenuId = null;
-                StateHasChanged();
+                ResetGenerationState();
                 Snackbar.Add("Impossible de rejoindre le groupe de génération du menu. Veuillez réessayer.", Severity.Error);
                 throw;
             }
+        }
+
+        private void ResetGenerationState()
+        {
+            _isGenerating = false;
+            _pendingMenuId = null;
+            StateHasChanged();
         }
 
         public async ValueTask DisposeAsync()
