@@ -91,9 +91,22 @@ public class MenuService : IMenuService
                     "Temporary menu created. MenuId: {MenuId}",
                     menu.Id);
             }
-            catch
+            catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                try
+                {
+                    await transaction.RollbackAsync();
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(
+                        rollbackEx,
+                        "An error occurred while rolling back the transaction in StartMenuGenerationAsync.");
+                }
+
+                _logger.LogError(
+                    ex,
+                    "An error occurred during the menu generation transaction in StartMenuGenerationAsync.");
                 throw;
             }
         });
