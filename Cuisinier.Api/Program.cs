@@ -167,5 +167,6 @@ app.MapMenuEndpoints();
 app.MapRecipeEndpoints();
 app.MapShoppingListEndpoints();
 app.MapFavoriteEndpoints();
+app.MapDishEndpoints();
 
 app.Run();

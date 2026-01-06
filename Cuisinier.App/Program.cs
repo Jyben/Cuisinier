@@ -45,6 +45,14 @@ builder.Services.AddRefitClient<IFavoriteApi>()
         c.BaseAddress = new Uri(url);
     });
 
+builder.Services.AddRefitClient<IDishApi>()
+    .ConfigureHttpClient((sp, c) => 
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        var url = config["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
+        c.BaseAddress = new Uri(url);
+    });
+
 // MudBlazor
 builder.Services.AddMudServices();
 

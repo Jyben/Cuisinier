@@ -1,12 +1,8 @@
 namespace Cuisinier.Core.Entities;
 
-public class Recipe
+public class Dish
 {
     public int Id { get; set; }
-    public int? MenuId { get; set; }
-    public Menu? Menu { get; set; }
-    public int? DishId { get; set; }
-    public Dish? Dish { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string? CompleteDescription { get; set; }
@@ -16,11 +12,10 @@ public class Recipe
     public TimeSpan? CookingTime { get; set; }
     public int? Kcal { get; set; }
     public int Servings { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
     
-    public List<RecipeIngredient> Ingredients { get; set; } = new();
-    
-    public bool IsFromDatabase { get; set; }
-    public int? OriginalDishId { get; set; }
-    public Dish? OriginalDish { get; set; }
+    public List<DishIngredient> Ingredients { get; set; } = new();
+    public List<Recipe> Recipes { get; set; } = new();
+    public List<ShoppingListDish> ShoppingListDishes { get; set; } = new();
 }
-
