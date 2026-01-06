@@ -23,6 +23,7 @@ namespace Cuisinier.App.Components
         private bool _isGenerating = false;
         private HubConnection? _hubConnection;
         private int? _pendingMenuId = null;
+        private SemaphoreSlim? _connectionLock = new(1, 1);
         
         // Use DesiredFoodItem from DesiredFoodsSection component
         
@@ -318,99 +319,161 @@ namespace Cuisinier.App.Components
 
         private async Task InitializeSignalRAsync(int menuId)
         {
-            // Close existing connection if it exists
-            if (_hubConnection is not null)
+            // Capture the lock reference to avoid race condition with disposal
+            var lockRef = _connectionLock;
+            if (lockRef == null)
             {
+                Logger.LogError("Connection lock is not available, component may be disposed");
+                return;
+            }
+
+            // Use a semaphore to prevent concurrent connection operations
+            await lockRef.WaitAsync();
+            try
+            {
+                // Close existing connection if it exists and ensure it's fully disposed
+                if (_hubConnection is not null)
+                {
+                    // Check connection state before attempting to stop
+                    if (_hubConnection.State != HubConnectionState.Disconnected)
+                    {
+                        try
+                        {
+                            await _hubConnection.StopAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            // Log errors during shutdown at debug level for diagnostics
+                            Logger.LogDebug(ex, "Error while stopping SignalR hub connection");
+                        }
+                    }
+
+                    try
+                    {
+                        await _hubConnection.DisposeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log errors during disposal at debug level for diagnostics
+                        Logger.LogDebug(ex, "Error while disposing SignalR hub connection");
+                    }
+                    
+                    _hubConnection = null;
+                }
+
+                var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
+                if (string.IsNullOrWhiteSpace(apiBaseUrl))
+                {
+                    Logger.LogError("Unable to determine API base URL for SignalR hub connection. Both configuration 'ApiBaseUrl' and navigation base URI are null or empty.");
+                    _isGenerating = false;
+                    _pendingMenuId = null;
+                    StateHasChanged();
+                    Snackbar.Add("Erreur de configuration du serveur. Veuillez contacter l'administrateur ou réessayer plus tard.", Severity.Error);
+                    return;
+                }
+                var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
+                
+                _hubConnection = new HubConnectionBuilder()
+                    .WithUrl(hubUrl)
+                    .Build();
+
+                // Listen for menu generation completion
+                _hubConnection.On<MenuResponse>("MenuGenerated", (menu) =>
+                {
+                    if (_pendingMenuId == menu.Id)
+                    {
+                        _isGenerating = false;
+                        _pendingMenuId = null;
+                        InvokeAsync(() =>
+                        {
+                            StateHasChanged();
+                            Navigation.NavigateTo($"/menu-generation/{menu.Id}");
+                        });
+                    }
+                });
+
+                // Listen for menu generation errors
+                _hubConnection.On<int>("MenuGenerationError", (menuId) =>
+                {
+                    if (_pendingMenuId == menuId)
+                    {
+                        _isGenerating = false;
+                        _pendingMenuId = null;
+                        InvokeAsync(() =>
+                        {
+                            StateHasChanged();
+                            Snackbar.Add("Une erreur est survenue lors de la génération du menu. Veuillez réessayer.", Severity.Error);
+                        });
+                    }
+                });
+
                 try
                 {
-                    await _hubConnection.StopAsync();
-                    await _hubConnection.DisposeAsync();
+                    await _hubConnection.StartAsync();
+                    await _hubConnection.SendAsync("JoinMenuGroup", menuId);
                 }
                 catch (Exception ex)
                 {
-                    // Log errors during shutdown at debug level for diagnostics
-                    Logger.LogDebug(ex, "Error while shutting down SignalR hub connection");
-                }
-                _hubConnection = null;
-            }
-
-            var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
-            if (string.IsNullOrWhiteSpace(apiBaseUrl))
-            {
-                Logger.LogError("Unable to determine API base URL for SignalR hub connection. Both configuration 'ApiBaseUrl' and navigation base URI are null or empty.");
-                _isGenerating = false;
-                _pendingMenuId = null;
-                StateHasChanged();
-                Snackbar.Add("Erreur de configuration du serveur. Veuillez contacter l'administrateur ou réessayer plus tard.", Severity.Error);
-                return;
-            }
-            var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
-            
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(hubUrl)
-                .Build();
-
-            // Listen for menu generation completion
-            _hubConnection.On<MenuResponse>("MenuGenerated", (menu) =>
-            {
-                if (_pendingMenuId == menu.Id)
-                {
+                    Logger.LogError(ex, "Error connecting to SignalR hub");
                     _isGenerating = false;
                     _pendingMenuId = null;
-                    InvokeAsync(() =>
-                    {
-                        StateHasChanged();
-                        Navigation.NavigateTo($"/menu-generation/{menu.Id}");
-                    });
+                    StateHasChanged();
+                    Snackbar.Add("Impossible de se connecter au serveur pour suivre la génération du menu. Veuillez réessayer.", Severity.Error);
                 }
-            });
-
-            // Listen for menu generation errors
-            _hubConnection.On<int>("MenuGenerationError", (menuId) =>
-            {
-                if (_pendingMenuId == menuId)
-                {
-                    _isGenerating = false;
-                    _pendingMenuId = null;
-                    InvokeAsync(() =>
-                    {
-                        StateHasChanged();
-                        Snackbar.Add("Une erreur est survenue lors de la génération du menu. Veuillez réessayer.", Severity.Error);
-                    });
-                }
-            });
-
-            try
-            {
-                await _hubConnection.StartAsync();
-                await _hubConnection.SendAsync("JoinMenuGroup", menuId);
             }
-            catch (Exception ex)
+            finally
             {
-                Logger.LogError(ex, "Error connecting to SignalR hub");
-                _isGenerating = false;
-                _pendingMenuId = null;
-                StateHasChanged();
-                Snackbar.Add("Impossible de se connecter au serveur pour suivre la génération du menu. Veuillez réessayer.", Severity.Error);
+                // Release using the captured reference to avoid race conditions
+                lockRef.Release();
             }
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (_hubConnection is not null)
+            // Capture the lock reference to avoid race condition
+            var lockToDispose = _connectionLock;
+            if (lockToDispose == null)
             {
-                try
+                return;
+            }
+
+            // Wait for any ongoing connection operations to complete
+            await lockToDispose.WaitAsync();
+            try
+            {
+                if (_hubConnection is not null)
                 {
-                    await _hubConnection.StopAsync();
+                    // Check connection state before attempting to stop
+                    if (_hubConnection.State != HubConnectionState.Disconnected)
+                    {
+                        try
+                        {
+                            await _hubConnection.StopAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogDebug(ex, "Error while stopping SignalR hub connection during disposal.");
+                        }
+                    }
+
+                    try
+                    {
+                        await _hubConnection.DisposeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug(ex, "Error while disposing SignalR hub connection during disposal.");
+                    }
+
+                    _hubConnection = null;
                 }
-                catch (Exception ex)
-                {
-                    Logger.LogDebug(ex, "Error while stopping SignalR hub connection during disposal.");
-                }
-                finally
-                {
-                    await _hubConnection.DisposeAsync();
-                }
+            }
+            finally
+            {
+                // Release and dispose the lock, then null out the field
+                lockToDispose.Release();
+                lockToDispose.Dispose();
+                _connectionLock = null;
             }
         }
 
