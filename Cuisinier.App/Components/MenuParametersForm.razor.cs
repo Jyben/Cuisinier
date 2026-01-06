@@ -334,6 +334,15 @@ namespace Cuisinier.App.Components
             }
 
             var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
+            if (string.IsNullOrWhiteSpace(apiBaseUrl))
+            {
+                Logger.LogError("Unable to determine API base URL for SignalR hub connection. Both configuration 'ApiBaseUrl' and navigation base URI are null or empty.");
+                _isGenerating = false;
+                _pendingMenuId = null;
+                StateHasChanged();
+                Snackbar.Add("Erreur de configuration du serveur. Veuillez contacter l'administrateur ou réessayer plus tard.", Severity.Error);
+                return;
+            }
             var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
             
             _hubConnection = new HubConnectionBuilder()
