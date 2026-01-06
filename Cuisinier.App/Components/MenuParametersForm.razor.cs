@@ -2,16 +2,27 @@ using Cuisinier.Core.DTOs;
 using Cuisinier.App.Services;
 using MudBlazor;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Cuisinier.App.Components
 {
-    public partial class MenuParametersForm
+    public partial class MenuParametersForm : IAsyncDisposable
     {
         [Parameter] public MenuParameters Parameters { get; set; } = new();
         [Parameter] public EventCallback OnGenerate { get; set; }
 
+        [Inject] private IMenuApi MenuApi { get; set; } = null!;
+        [Inject] private NavigationManager Navigation { get; set; } = null!;
+        [Inject] private ISnackbar Snackbar { get; set; } = null!;
+        [Inject] private IConfiguration Configuration { get; set; } = null!;
+        [Inject] private ILogger<MenuParametersForm> Logger { get; set; } = null!;
+
         private MudForm? _form;
         private bool _isGenerating = false;
+        private HubConnection? _hubConnection;
+        private int? _pendingMenuId = null;
         
         // Use DesiredFoodItem from DesiredFoodsSection component
         
@@ -289,15 +300,158 @@ namespace Cuisinier.App.Components
                 _isGenerating = true;
                 StateHasChanged(); // Force update to display animation
                 
-                var menu = await MenuApi.GenerateMenuAsync(request);
+                // Initialize SignalR connection BEFORE starting menu generation to avoid race condition
+                await InitializeSignalRConnectionAsync();
 
-                Navigation.NavigateTo($"/menu-generation/{menu.Id}");
+                // Start menu generation (returns immediately)
+                var response = await MenuApi.GenerateMenuAsync(request);
+                _pendingMenuId = response.MenuId;
+
+                // Join the menu group now that we have the menuId
+                await JoinMenuGroupAsync(response.MenuId);
             }
-            catch
+            catch (Exception ex)
             {
-                _isGenerating = false;
-                StateHasChanged();
+                Logger.LogError(ex, "Error starting menu generation");
+                ResetGenerationState();
                 Snackbar.Add("Une erreur est survenue lors de la génération du menu. Veuillez réessayer.", Severity.Error);
+                
+                // Clean up SignalR connection on error
+                if (_hubConnection is not null)
+                {
+                    try
+                    {
+                        await _hubConnection.StopAsync();
+                        await _hubConnection.DisposeAsync();
+                    }
+                    catch
+                    {
+                        // Ignore errors during cleanup
+                    }
+                    _hubConnection = null;
+                }
+            }
+        }
+
+        private async Task InitializeSignalRConnectionAsync()
+        {
+            // Close existing connection if it exists
+            if (_hubConnection is not null)
+            {
+                try
+                {
+                    await _hubConnection.StopAsync();
+                    await _hubConnection.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Log errors during shutdown at debug level for diagnostics
+                    Logger.LogDebug(ex, "Error while shutting down SignalR hub connection");
+                }
+                _hubConnection = null;
+            }
+
+            var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
+            if (string.IsNullOrWhiteSpace(apiBaseUrl))
+            {
+                Logger.LogError("Unable to determine API base URL for SignalR hub connection. Both configuration 'ApiBaseUrl' and navigation base URI are null or empty.");
+                ResetGenerationState();
+                Snackbar.Add("Erreur de configuration du serveur. Veuillez contacter l'administrateur ou réessayer plus tard.", Severity.Error);
+                throw new InvalidOperationException("Unable to determine API base URL for SignalR hub connection");
+            }
+            var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
+            
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .Build();
+
+            // Listen for menu generation completion
+            _hubConnection.On<MenuResponse>("MenuGenerated", (menu) =>
+            {
+                if (_pendingMenuId == menu.Id)
+                {
+                    _isGenerating = false;
+                    _pendingMenuId = null;
+                    InvokeAsync(() =>
+                    {
+                        StateHasChanged();
+                        Navigation.NavigateTo($"/menu-generation/{menu.Id}");
+                    });
+                }
+            });
+
+            // Listen for menu generation errors
+            _hubConnection.On<int>("MenuGenerationError", (menuId) =>
+            {
+                if (_pendingMenuId == menuId)
+                {
+                    _isGenerating = false;
+                    _pendingMenuId = null;
+                    InvokeAsync(() =>
+                    {
+                        StateHasChanged();
+                        Snackbar.Add("Une erreur est survenue lors de la génération du menu. Veuillez réessayer.", Severity.Error);
+                    });
+                }
+            });
+
+            try
+            {
+                await _hubConnection.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error connecting to SignalR hub");
+                ResetGenerationState();
+                Snackbar.Add("Impossible de se connecter au serveur pour suivre la génération du menu. Veuillez réessayer.", Severity.Error);
+                throw;
+            }
+        }
+
+        private async Task JoinMenuGroupAsync(int menuId)
+        {
+            if (_hubConnection is null)
+            {
+                Logger.LogError("Cannot join menu group: SignalR connection is not initialized");
+                throw new InvalidOperationException("SignalR connection is not initialized");
+            }
+
+            try
+            {
+                await _hubConnection.SendAsync("JoinMenuGroup", menuId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error joining menu group");
+                ResetGenerationState();
+                Snackbar.Add("Impossible de rejoindre le groupe de génération du menu. Veuillez réessayer.", Severity.Error);
+                throw;
+            }
+        }
+
+        private void ResetGenerationState()
+        {
+            _isGenerating = false;
+            _pendingMenuId = null;
+            StateHasChanged();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_hubConnection is not null)
+            {
+                try
+                {
+                    await _hubConnection.StopAsync();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug(ex, "Error while stopping SignalR hub connection during disposal.");
+                }
+                finally
+                {
+                    await _hubConnection.DisposeAsync();
+                }
             }
         }
 

@@ -32,6 +32,7 @@ builder.Services.AddSingleton<IOpenAIService>(sp =>
 
 builder.Services.AddScoped<Cuisinier.Infrastructure.Services.IRecipeService, Cuisinier.Infrastructure.Services.RecipeService>();
 builder.Services.AddScoped<BackgroundRecipeService>();
+builder.Services.AddScoped<BackgroundMenuService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IRecipeQueryService, RecipeQueryService>();
 

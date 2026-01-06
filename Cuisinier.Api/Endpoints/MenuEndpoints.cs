@@ -12,8 +12,8 @@ public static class MenuEndpoints
         group.MapPost("/generate", GenerateMenu)
             .WithName("GenerateMenu")
             .WithSummary("Generate a new weekly menu")
-            .WithDescription("Generates a weekly menu based on provided parameters. Deletes non-validated menus before generating.")
-            .Produces<MenuResponse>(StatusCodes.Status200OK)
+            .WithDescription("Starts generating a weekly menu in the background based on provided parameters. Returns immediately with menu ID. Use SignalR to receive notification when generation is complete.")
+            .Produces<MenuGenerationResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status500InternalServerError);
 
@@ -91,10 +91,21 @@ public static class MenuEndpoints
 
     private static async Task<IResult> GenerateMenu(
         MenuGenerationRequest request,
-        IMenuService menuService)
+        IMenuService menuService,
+        BackgroundMenuService backgroundMenuService)
     {
-        var menu = await menuService.GenerateMenuAsync(request);
-        return Results.Ok(menu);
+        // Create a temporary menu and launch generation in background
+        var menuId = await menuService.StartMenuGenerationAsync(request);
+        var response = new MenuGenerationResponse
+        {
+            MenuId = menuId,
+            Status = "generating"
+        };
+        
+        // Launch generation in background (fire-and-forget)
+        backgroundMenuService.StartGenerateMenuInBackground(menuId, request);
+        
+        return Results.Ok(response);
     }
 
     private static async Task<IResult> GetMenu(

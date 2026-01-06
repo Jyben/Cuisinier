@@ -38,6 +38,87 @@ public class MenuService : IMenuService
         _logger = logger;
     }
 
+    public async Task<int> StartMenuGenerationAsync(MenuGenerationRequest request)
+    {
+        _logger.LogInformation(
+            "Starting menu generation. WeekStartDate: {WeekStartDate}, RecipeIdsCount: {RecipeIdsCount}",
+            request.Parameters.WeekStartDate,
+            request.RecipeIds?.Count ?? 0);
+
+        // Use execution strategy to wrap transaction (required when EnableRetryOnFailure is enabled)
+        var strategy = _context.Database.CreateExecutionStrategy();
+        int menuId = 0;
+        
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Delete all non-validated menus (menus without shopping list) before generating a new one
+                var nonValidatedMenus = await _context.Menus
+                    .Where(m => !_context.ShoppingLists.Any(sl => sl.MenuId == m.Id))
+                    .ToListAsync();
+
+                if (nonValidatedMenus.Any())
+                {
+                    _logger.LogInformation(
+                        "Deleting {Count} non-validated menus before generating new menu",
+                        nonValidatedMenus.Count);
+                    _context.Menus.RemoveRange(nonValidatedMenus);
+                    await _context.SaveChangesAsync();
+                }
+
+                // Save parameters in MenuSettings entity (independent of the menu)
+                await SaveParametersInternalAsync(request.Parameters);
+
+                // Create a temporary menu (will be populated by background service)
+                var menu = new Menu
+                {
+                    WeekStartDate = request.Parameters.WeekStartDate,
+                    CreationDate = DateTime.UtcNow,
+                    GenerationParametersJson = null
+                };
+
+                _context.Menus.Add(menu);
+                await _context.SaveChangesAsync();
+
+                // Capture the ID before commit
+                menuId = menu.Id;
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Temporary menu created. MenuId: {MenuId}",
+                    menu.Id);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    await transaction.RollbackAsync();
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogError(
+                        rollbackEx,
+                        "An error occurred while rolling back the transaction in StartMenuGenerationAsync.");
+                }
+
+                _logger.LogError(
+                    ex,
+                    "An error occurred during the menu generation transaction in StartMenuGenerationAsync.");
+                throw;
+            }
+        });
+
+        if (menuId == 0)
+        {
+            throw new InvalidOperationException("Failed to create menu in transaction");
+        }
+
+        return menuId;
+    }
+
     public async Task<MenuResponse> GenerateMenuAsync(MenuGenerationRequest request)
     {
         _logger.LogInformation(
