@@ -402,9 +402,9 @@ namespace Cuisinier.App.Components
                 {
                     await _hubConnection.StopAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore errors during shutdown
+                    Logger.LogDebug(ex, "Error while stopping SignalR hub connection during disposal.");
                 }
                 finally
                 {
