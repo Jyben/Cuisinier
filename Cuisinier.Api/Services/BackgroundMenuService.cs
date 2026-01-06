@@ -225,8 +225,18 @@ public class BackgroundMenuService
                 }
                 
                 // Send error notification
-                await _hubContext.Clients.Group($"menu-{menuId}")
-                    .SendAsync("MenuGenerationError", menuId);
+                try
+                {
+                    await _hubContext.Clients.Group($"menu-{menuId}")
+                        .SendAsync("MenuGenerationError", menuId);
+                }
+                catch (Exception notificationEx)
+                {
+                    _logger.LogError(
+                        notificationEx,
+                        "Failed to send error notification for menu generation failure. MenuId: {MenuId}",
+                        menuId);
+                }
             }
         });
 
