@@ -199,9 +199,68 @@ public class BackgroundMenuService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during menu generation for MenuId: {MenuId}", menuId);
+                
+                // Clean up temporary menu record on failure
+                try
+                {
+                    using var cleanupScope = _scopeFactory.CreateScope();
+                    var cleanupContext = cleanupScope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
+                    
+                    // Check if menu has any recipes before loading the full menu
+                    var hasRecipes = await cleanupContext.Recipes.AnyAsync(r => r.MenuId == menuId);
+                    
+                    if (!hasRecipes)
+                    {
+                        var failedMenu = await cleanupContext.Menus.FindAsync(menuId);
+                        
+                        if (failedMenu != null)
+                        {
+                            cleanupContext.Menus.Remove(failedMenu);
+                            
+                            try
+                            {
+                                await cleanupContext.SaveChangesAsync();
+                                _logger.LogInformation(
+                                    "Cleaned up temporary menu after generation failure. MenuId: {MenuId}",
+                                    menuId);
+                            }
+                            catch (Exception saveEx)
+                            {
+                                _logger.LogWarning(
+                                    saveEx,
+                                    "Failed to save menu deletion (possibly already deleted). MenuId: {MenuId}",
+                                    menuId);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Menu has recipes despite failure, not cleaning up. MenuId: {MenuId}",
+                            menuId);
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogError(
+                        cleanupEx,
+                        "Failed to clean up temporary menu after generation failure. MenuId: {MenuId}",
+                        menuId);
+                }
+                
                 // Send error notification
-                await _hubContext.Clients.Group($"menu-{menuId}")
-                    .SendAsync("MenuGenerationError", menuId);
+                try
+                {
+                    await _hubContext.Clients.Group($"menu-{menuId}")
+                        .SendAsync("MenuGenerationError", menuId);
+                }
+                catch (Exception notificationEx)
+                {
+                    _logger.LogError(
+                        notificationEx,
+                        "Failed to send error notification for menu generation failure. MenuId: {MenuId}",
+                        menuId);
+                }
             }
         });
     }
