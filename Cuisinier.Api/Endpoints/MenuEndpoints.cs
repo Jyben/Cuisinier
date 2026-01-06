@@ -102,8 +102,8 @@ public static class MenuEndpoints
             Status = "generating"
         };
         
-        // Launch generation in background
-        await backgroundMenuService.GenerateMenuAsync(menuId, request);
+        // Launch generation in background (fire-and-forget)
+        _ = backgroundMenuService.GenerateMenuAsync(menuId, request);
         
         return Results.Ok(response);
     }
