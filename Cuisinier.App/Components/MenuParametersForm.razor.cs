@@ -319,15 +319,16 @@ namespace Cuisinier.App.Components
 
         private async Task InitializeSignalRAsync(int menuId)
         {
-            // Check if semaphore is available
-            if (_connectionLock == null)
+            // Capture the lock reference to avoid race condition with disposal
+            var lockRef = _connectionLock;
+            if (lockRef == null)
             {
                 Logger.LogError("Connection lock is not available, component may be disposed");
                 return;
             }
 
             // Use a semaphore to prevent concurrent connection operations
-            await _connectionLock.WaitAsync();
+            await lockRef.WaitAsync();
             try
             {
                 // Close existing connection if it exists and ensure it's fully disposed
@@ -422,25 +423,22 @@ namespace Cuisinier.App.Components
             }
             finally
             {
-                // Only release if the lock is still available
-                // If it's null, the component has been disposed
-                if (_connectionLock != null)
-                {
-                    _connectionLock.Release();
-                }
+                // Release using the captured reference to avoid race conditions
+                lockRef.Release();
             }
         }
 
         public async ValueTask DisposeAsync()
         {
-            // Check if semaphore is available and not already disposed
-            if (_connectionLock == null)
+            // Capture the lock reference to avoid race condition
+            var lockToDispose = _connectionLock;
+            if (lockToDispose == null)
             {
                 return;
             }
 
             // Wait for any ongoing connection operations to complete
-            await _connectionLock.WaitAsync();
+            await lockToDispose.WaitAsync();
             try
             {
                 if (_hubConnection is not null)
@@ -472,14 +470,10 @@ namespace Cuisinier.App.Components
             }
             finally
             {
-                // Release the lock before setting it to null to avoid race conditions
-                var lockToDispose = _connectionLock;
-                if (lockToDispose != null)
-                {
-                    lockToDispose.Release();
-                    _connectionLock = null;
-                    lockToDispose.Dispose();
-                }
+                // Release and dispose the lock, then null out the field
+                lockToDispose.Release();
+                lockToDispose.Dispose();
+                _connectionLock = null;
             }
         }
 
