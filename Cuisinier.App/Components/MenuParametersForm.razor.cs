@@ -422,7 +422,12 @@ namespace Cuisinier.App.Components
             }
             finally
             {
-                _connectionLock?.Release();
+                // Only release if the lock is still available
+                // If it's null, the component has been disposed
+                if (_connectionLock != null)
+                {
+                    _connectionLock.Release();
+                }
             }
         }
 
@@ -467,10 +472,14 @@ namespace Cuisinier.App.Components
             }
             finally
             {
+                // Release the lock before setting it to null to avoid race conditions
                 var lockToDispose = _connectionLock;
-                _connectionLock = null;
-                lockToDispose.Release();
-                lockToDispose.Dispose();
+                if (lockToDispose != null)
+                {
+                    lockToDispose.Release();
+                    _connectionLock = null;
+                    lockToDispose.Dispose();
+                }
             }
         }
 
