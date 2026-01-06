@@ -326,9 +326,10 @@ namespace Cuisinier.App.Components
                     await _hubConnection.StopAsync();
                     await _hubConnection.DisposeAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore errors during shutdown
+                    // Log errors during shutdown at debug level for diagnostics
+                    Logger.LogDebug(ex, "Error while shutting down SignalR hub connection");
                 }
                 _hubConnection = null;
             }
