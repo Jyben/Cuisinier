@@ -51,7 +51,8 @@ public static class EntityMappings
             Servings = recipe.Servings,
             Ingredients = recipe.Ingredients.Select(i => i.ToResponse()).ToList(),
             IsFromDatabase = recipe.IsFromDatabase,
-            OriginalDishId = recipe.OriginalDishId
+            OriginalDishId = recipe.OriginalDishId,
+            IsCooked = recipe.IsCooked
         };
     }
 
@@ -105,6 +106,7 @@ public static class EntityMappings
             Servings = recipeResponse.Servings,
             IsFromDatabase = recipeResponse.IsFromDatabase,
             OriginalDishId = recipeResponse.OriginalDishId,
+            IsCooked = recipeResponse.IsCooked,
             Ingredients = recipeResponse.Ingredients.Select(i => new RecipeIngredient
             {
                 Name = i.Name,

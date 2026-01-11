@@ -22,5 +22,6 @@ public class Recipe
     public bool IsFromDatabase { get; set; }
     public int? OriginalDishId { get; set; }
     public Dish? OriginalDish { get; set; }
+    public bool IsCooked { get; set; } = false;
 }
 

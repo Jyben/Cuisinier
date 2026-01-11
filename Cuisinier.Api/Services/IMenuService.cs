@@ -14,6 +14,7 @@ public interface IMenuService
     Task<RecipeResponse> ReplaceIngredientAsync(int menuId, int recipeId, IngredientReplacementRequest request, string userId);
     Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId, string userId);
     Task DeleteRecipeAsync(int menuId, int recipeId, string userId);
+    Task<RecipeResponse> ToggleRecipeCookedStatusAsync(int menuId, int recipeId, string userId);
     Task DeleteMenuAsync(int menuId, string userId);
     Task<MenuResponse> ValidateMenuAsync(int menuId, ValidateMenuRequest? request, string userId);
 }

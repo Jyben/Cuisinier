@@ -25,17 +25,30 @@
         {
             <MudImage Src="@Recipe.ImageUrl" Alt="@Recipe.Title" Height="160" ObjectFit="ObjectFit.Cover" />
         }
-        @if (ShowFavoriteButton)
-        {
-            <MudIconButton 
-                Icon="@(_isFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
-                Color="@(_isFavorite ? Color.Error : Color.Default)"
-                Size="Size.Small"
-                Variant="Variant.Text"
-                OnClick="ToggleFavorite"
-                Class="favorite-button"
-                Style="@(_isFavorite ? "color: var(--mud-palette-error);" : "")" />
-        }
+        <div class="header-buttons">
+            @if (ShowFavoriteButton)
+            {
+                <MudIconButton 
+                    Icon="@(_isFavorite ? Icons.Material.Filled.Favorite : Icons.Material.Outlined.FavoriteBorder)"
+                    Color="@(_isFavorite ? Color.Error : Color.Default)"
+                    Size="Size.Small"
+                    Variant="Variant.Text"
+                    OnClick="ToggleFavorite"
+                    Class="favorite-button"
+                    Style="@(_isFavorite ? "color: var(--mud-palette-error);" : "")" />
+            }
+            @if (OnToggleCooked.HasDelegate && MenuValid)
+            {
+                <MudIconButton 
+                    Icon="@(Recipe.IsCooked ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.CheckCircle)"
+                    Color="@(Recipe.IsCooked ? Color.Success : Color.Default)"
+                    Size="Size.Small"
+                    Variant="Variant.Text"
+                    OnClick="ToggleCooked"
+                    Class="cooked-button"
+                    Style="@(Recipe.IsCooked ? "color: var(--mud-palette-success);" : "")" />
+            }
+        </div>
     </div>
     <MudCardContent Class="pa-3">
         <MudText Typo="Typo.h6" Class="mb-1" Style="font-weight: 600;">@Recipe.Title</MudText>
@@ -166,6 +179,7 @@
     [Parameter] public bool MenuValid { get; set; } = false;
     [Parameter] public EventCallback<int> OnDelete { get; set; }
     [Parameter] public EventCallback<int> OnReplace { get; set; }
+    [Parameter] public EventCallback<int> OnToggleCooked { get; set; }
 
     private bool _isFavorite = false;
     private bool _isLoadingFavorite = false;
@@ -295,6 +309,14 @@
         }
     }
 
+    private async Task ToggleCooked()
+    {
+        if (OnToggleCooked.HasDelegate)
+        {
+            await OnToggleCooked.InvokeAsync(Recipe.Id);
+        }
+    }
+
     private async Task OpenDetailedRecipe()
     {
         var parameters = new DialogParameters<RecipeDetailsDialog>
@@ -336,18 +358,25 @@
         position: relative;
     }
 
-    .favorite-button {
+    .header-buttons {
         position: absolute;
         top: 8px;
         right: 8px;
         z-index: 10;
+        display: flex;
+        gap: 4px;
+    }
+
+    .favorite-button,
+    .cooked-button {
         background-color: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(4px);
         border-radius: 50%;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
-    .favorite-button:hover {
+    .favorite-button:hover,
+    .cooked-button:hover {
         background-color: rgba(255, 255, 255, 1);
         transform: scale(1.1);
         transition: all 0.2s ease;
