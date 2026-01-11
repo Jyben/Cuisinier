@@ -84,6 +84,7 @@ services:
       - /usr/share/nginx/html:/out
     command: >
       bash -c "
+      apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/* &&
       dotnet workload install wasm-tools &&
       rm -rf Cuisinier.App/obj Cuisinier.App/bin &&
       dotnet restore Cuisinier.App/Cuisinier.App.csproj &&
