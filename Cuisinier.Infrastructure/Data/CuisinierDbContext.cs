@@ -104,8 +104,12 @@ public class CuisinierDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<MenuSettings>(entity =>
         {
             entity.HasKey(e => e.Id);
-            // Disable IDENTITY to allow explicit insertion of Id = 1
-            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.HasOne(e => e.User)
+                  .WithOne(e => e.MenuSettings)
+                  .HasForeignKey<MenuSettings>(e => e.UserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Favorite configuration

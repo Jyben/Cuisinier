@@ -13,4 +13,5 @@ public class ApplicationUser : IdentityUser
     public List<Favorite> Favorites { get; set; } = new();
     public List<ShoppingList> ShoppingLists { get; set; } = new();
     public List<RefreshToken> RefreshTokens { get; set; } = new();
+    public MenuSettings? MenuSettings { get; set; }
 }

@@ -464,8 +464,9 @@ public class MenuService : IMenuService
             return cachedParameters;
         }
 
-        // Get parameters from MenuSettings entity (ID = 1) - MenuSettings is shared, no userId filtering
-        var menuSettings = await _context.MenuSettings.FindAsync(1);
+        // Get parameters from MenuSettings entity for this user
+        var menuSettings = await _context.MenuSettings
+            .FirstOrDefaultAsync(ms => ms.UserId == userId);
 
         if (menuSettings == null || string.IsNullOrEmpty(menuSettings.ParametersJson))
         {
@@ -510,15 +511,15 @@ public class MenuService : IMenuService
         // Reset the date so it's not saved (it will be recalculated each time)
         parametersForSave.WeekStartDate = default;
 
-        // MenuSettings is shared across users (no userId filtering)
-        // Get or create MenuSettings record (ID = 1)
-        var menuSettings = await _context.MenuSettings.FindAsync(1);
+        // Get or create MenuSettings record for this user
+        var menuSettings = await _context.MenuSettings
+            .FirstOrDefaultAsync(ms => ms.UserId == userId);
         
         if (menuSettings == null)
         {
             menuSettings = new MenuSettings
             {
-                Id = 1,
+                UserId = userId,
                 ParametersJson = JsonSerializer.Serialize(parametersForSave, jsonOptions),
                 ModificationDate = DateTime.UtcNow
             };
