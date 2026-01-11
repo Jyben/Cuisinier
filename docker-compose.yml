@@ -58,6 +58,12 @@ services:
         TrustServerCertificate=True;
         Encrypt=True;
       OpenAI__ApiKey: ${OPENAI_API_KEY}
+      Smtp__Host: ${SMTP_HOST}
+      Smtp__Port: ${SMTP_PORT}
+      Smtp__Username: ${SMTP_USERNAME}
+      Smtp__Password: ${SMTP_PASSWORD}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL}
+      Jwt__SecretKey: ${JWT_SECRET_KEY}
     ports:
       - "8080:8080"
     depends_on:

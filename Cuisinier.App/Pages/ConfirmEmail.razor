@@ -1,0 +1,126 @@
+@page "/confirm-email"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@using Cuisinier.Core.DTOs
+@using Cuisinier.App.Services
+@using MudBlazor
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Confirmation d'email</PageTitle>
+
+<PageHeader Title="Confirmation d'email" />
+
+<MudContainer MaxWidth="MaxWidth.Small">
+    @if (_confirming)
+    {
+        <MudCard>
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+                    <MudText>Confirmation de votre email en cours...</MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+    else if (_confirmed)
+    {
+        <MudCard>
+            <MudCardContent>
+                <MudAlert Severity="Severity.Success" Class="mb-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Email confirmé avec succès !</MudText>
+                    <MudText>Votre compte est maintenant activé. Vous pouvez vous connecter.</MudText>
+                </MudAlert>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           FullWidth="true"
+                           OnClick="@(() => Navigation.NavigateTo("/login"))">
+                    Se connecter
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    }
+    else if (_error)
+    {
+        <MudCard>
+            <MudCardContent>
+                <MudAlert Severity="Severity.Error" Class="mb-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Erreur de confirmation</MudText>
+                    <MudText>@_errorMessage</MudText>
+                </MudAlert>
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Default" 
+                           FullWidth="true"
+                           OnClick="@(() => Navigation.NavigateTo("/login"))">
+                    Retour à la connexion
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>
+
+@code {
+    private bool _confirming = true;
+    private bool _confirmed = false;
+    private bool _error = false;
+    private string _errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var queryString = uri.Query.TrimStart('?');
+        var queryParams = new Dictionary<string, string>();
+        
+        if (!string.IsNullOrEmpty(queryString))
+        {
+            foreach (var param in queryString.Split('&'))
+            {
+                var parts = param.Split('=', 2);
+                if (parts.Length == 2)
+                {
+                    queryParams[Uri.UnescapeDataString(parts[0])] = Uri.UnescapeDataString(parts[1]);
+                }
+            }
+        }
+        
+        var userId = queryParams.TryGetValue("userId", out var userIdValue) ? userIdValue : null;
+        var token = queryParams.TryGetValue("token", out var tokenValue) ? tokenValue : null;
+
+        if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(token))
+        {
+            _error = true;
+            _errorMessage = "Lien de confirmation invalide. Veuillez vérifier que vous avez utilisé le lien complet depuis l'email.";
+            _confirming = false;
+            return;
+        }
+
+        try
+        {
+            var result = await AuthService.ConfirmEmailAsync(new ConfirmEmailRequest
+            {
+                UserId = userId,
+                Token = token
+            });
+
+            if (result)
+            {
+                _confirmed = true;
+                Snackbar.Add("Email confirmé avec succès !", Severity.Success);
+            }
+            else
+            {
+                _error = true;
+                _errorMessage = "Le lien de confirmation est invalide ou a expiré. Veuillez demander un nouveau lien de confirmation.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _errorMessage = $"Erreur lors de la confirmation : {ex.Message}";
+        }
+        finally
+        {
+            _confirming = false;
+        }
+    }
+}
