@@ -140,8 +140,8 @@ public class CuisinierDbContext : IdentityDbContext<ApplicationUser>
             entity.HasOne(e => e.User)
                   .WithMany(e => e.Dishes)
                   .HasForeignKey(e => e.UserId)
-                  .IsRequired()
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.SetNull);
             entity.HasMany(e => e.Ingredients)
                   .WithOne(e => e.Dish)
                   .HasForeignKey(e => e.DishId)

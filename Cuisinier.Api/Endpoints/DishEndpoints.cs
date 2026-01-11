@@ -68,9 +68,9 @@ public static class DishEndpoints
             return Results.Unauthorized();
         }
 
+        // Dishes are shared (not user-specific), so we don't filter by UserId
         var query = context.Dishes
             .Include(d => d.Ingredients)
-            .Where(d => d.UserId == userId)
             .AsQueryable();
 
         // Apply search term filter
@@ -177,9 +177,10 @@ public static class DishEndpoints
             return Results.Unauthorized();
         }
 
+        // Dishes are shared (not user-specific), so we don't filter by UserId
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
+            .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dish == null)
         {
@@ -201,9 +202,10 @@ public static class DishEndpoints
         }
 
         // Check for duplicate (same title and same ingredients)
+        // Dishes are shared (not user-specific), so we check globally
         var existingDish = await CheckForDuplicateAsync(
             context,
-            userId,
+            null, // No userId filter - dishes are global
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
 
@@ -214,7 +216,7 @@ public static class DishEndpoints
 
         var dish = new Dish
         {
-            UserId = userId,
+            UserId = null, // Dishes are shared (not user-specific)
             Title = request.Title,
             Description = request.Description,
             CompleteDescription = request.CompleteDescription,
@@ -255,9 +257,10 @@ public static class DishEndpoints
             return Results.Unauthorized();
         }
 
+        // Dishes are shared (not user-specific), so we don't filter by UserId
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
+            .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dish == null)
         {
@@ -265,9 +268,10 @@ public static class DishEndpoints
         }
 
         // Check for duplicate (excluding current dish)
+        // Dishes are shared (not user-specific), so we check globally
         var existingDish = await CheckForDuplicateAsync(
             context,
-            userId,
+            null, // No userId filter - dishes are global
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList(),
             excludeId: id);
@@ -318,9 +322,10 @@ public static class DishEndpoints
             return Results.Unauthorized();
         }
 
+        // Dishes are shared (not user-specific), so we don't filter by UserId
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
+            .FirstOrDefaultAsync(d => d.Id == id);
 
         if (dish == null)
         {
@@ -344,9 +349,10 @@ public static class DishEndpoints
             return Results.Unauthorized();
         }
 
+        // Dishes are shared (not user-specific), so we check globally
         var exists = await CheckForDuplicateAsync(
             context,
-            userId,
+            null, // No userId filter - dishes are global
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList()) != null;
 
@@ -355,7 +361,7 @@ public static class DishEndpoints
 
     private static async Task<Dish?> CheckForDuplicateAsync(
         CuisinierDbContext context,
-        string userId,
+        string? userId, // Nullable - dishes are shared, so userId can be null
         string title,
         List<(string Name, string Quantity)> ingredients,
         int? excludeId = null)
@@ -363,10 +369,10 @@ public static class DishEndpoints
         // Normalize title for comparison (case-insensitive, trim)
         var normalizedTitle = title.Trim().ToLower();
 
-        // Load all dishes with ingredients into memory first (filtered by userId)
+        // Load all dishes with ingredients into memory first
+        // Dishes are shared (not user-specific), so we don't filter by userId
         var allDishes = await context.Dishes
             .Include(d => d.Ingredients)
-            .Where(d => d.UserId == userId)
             .ToListAsync();
 
         // Filter in memory (case-insensitive comparison)

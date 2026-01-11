@@ -206,9 +206,9 @@ public class MenuService : IMenuService
 
                 // Add newly generated recipes
                 // Check for duplicates in dishes and favorites before adding (for this user)
+                // Dishes are shared (not user-specific), so we don't filter by UserId
                 var allDishes = await _context.Dishes
                     .Include(d => d.Ingredients)
-                    .Where(d => d.UserId == userId)
                     .ToListAsync();
                 var allFavorites = await _context.Favorites
                     .Include(f => f.Ingredients)
@@ -304,7 +304,7 @@ public class MenuService : IMenuService
                     {
                         var newDish = new Dish
                         {
-                            UserId = userId,
+                            UserId = null, // Dishes are shared (not user-specific)
                             Title = recipe.Title,
                             Description = recipe.Description,
                             CompleteDescription = recipe.CompleteDescription,
@@ -1067,9 +1067,9 @@ public class MenuService : IMenuService
 
     private async Task EnsureDishesForMenuAsync(Menu menu, string userId)
     {
+        // Dishes are shared (not user-specific), so we don't filter by UserId
         var allDishes = await _context.Dishes
             .Include(d => d.Ingredients)
-            .Where(d => d.UserId == userId)
             .ToListAsync();
 
         var anyChanges = false;
@@ -1120,7 +1120,7 @@ public class MenuService : IMenuService
 
             var newDish = new Dish
             {
-                UserId = userId,
+                UserId = null, // Dishes are shared (not user-specific)
                 Title = recipe.Title,
                 Description = recipe.Description,
                 CompleteDescription = recipe.CompleteDescription,

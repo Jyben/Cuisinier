@@ -109,10 +109,10 @@ public class BackgroundMenuService
                         }
 
                         // Add newly generated recipes
-                        // Check for duplicates in dishes and favorites before adding (for this user)
+                        // Check for duplicates in dishes and favorites before adding
+                        // Dishes are shared (not user-specific), so we don't filter by UserId
                         var allDishes = await context.Dishes
                             .Include(d => d.Ingredients)
-                            .Where(d => d.UserId == userId)
                             .ToListAsync();
                         var allFavorites = await context.Favorites
                             .Include(f => f.Ingredients)
@@ -208,7 +208,7 @@ public class BackgroundMenuService
                             {
                                 var newDish = new Dish
                                 {
-                                    UserId = userId,
+                                    UserId = null, // Dishes are shared (not user-specific)
                                     Title = recipe.Title,
                                     Description = recipe.Description,
                                     CompleteDescription = recipe.CompleteDescription,
