@@ -33,7 +33,8 @@ jobs:
             git clean -fd
 
             docker compose down
-            docker compose up -d --build
+            docker compose build --no-cache front-builder
+            docker compose up -d
 
             docker compose run --rm front-builder
 
