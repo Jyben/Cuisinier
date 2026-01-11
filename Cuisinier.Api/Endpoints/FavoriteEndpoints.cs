@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Cuisinier.Core.DTOs;
 using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
+using Cuisinier.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cuisinier.Api.Endpoints;
@@ -14,48 +16,64 @@ public static class FavoriteEndpoints
         group.MapGet("", GetAllFavorites)
             .WithName("GetAllFavorites")
             .WithSummary("Get all favorites")
-            .Produces<List<FavoriteResponse>>(StatusCodes.Status200OK);
+            .Produces<List<FavoriteResponse>>(StatusCodes.Status200OK)
+            .RequireAuthorization();
 
         group.MapGet("/{id:int}", GetFavorite)
             .WithName("GetFavorite")
             .WithSummary("Get favorite by ID")
             .Produces<FavoriteResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
 
         group.MapPost("", AddFavorite)
             .WithName("AddFavorite")
             .WithSummary("Add a recipe to favorites")
             .Produces<FavoriteResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status409Conflict);
+            .Produces(StatusCodes.Status409Conflict)
+            .RequireAuthorization();
 
         group.MapPut("/{id:int}", UpdateFavorite)
             .WithName("UpdateFavorite")
             .WithSummary("Update a favorite recipe")
             .Produces<FavoriteResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
 
         group.MapDelete("/{id:int}", DeleteFavorite)
             .WithName("DeleteFavorite")
             .WithSummary("Delete a favorite recipe")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
 
         group.MapPost("/check-duplicate", CheckDuplicate)
             .WithName("CheckDuplicate")
             .WithSummary("Check if a recipe already exists in favorites")
-            .Produces<bool>(StatusCodes.Status200OK);
+            .Produces<bool>(StatusCodes.Status200OK)
+            .RequireAuthorization();
 
         group.MapPost("/check-duplicates-batch", CheckDuplicatesBatch)
             .WithName("CheckDuplicatesBatch")
             .WithSummary("Check multiple recipes for duplicates in favorites")
-            .Produces<CheckDuplicatesBatchResponse>(StatusCodes.Status200OK);
+            .Produces<CheckDuplicatesBatchResponse>(StatusCodes.Status200OK)
+            .RequireAuthorization();
     }
 
-    private static async Task<IResult> GetAllFavorites(CuisinierDbContext context)
+    private static async Task<IResult> GetAllFavorites(
+        ClaimsPrincipal user,
+        CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var favorites = await context.Favorites
             .Include(f => f.Ingredients)
+            .Where(f => f.UserId == userId)
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync();
 
@@ -63,11 +81,20 @@ public static class FavoriteEndpoints
         return Results.Ok(response);
     }
 
-    private static async Task<IResult> GetFavorite(int id, CuisinierDbContext context)
+    private static async Task<IResult> GetFavorite(
+        int id,
+        ClaimsPrincipal user,
+        CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id);
+            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
         if (favorite == null)
         {
@@ -79,11 +106,19 @@ public static class FavoriteEndpoints
 
     private static async Task<IResult> AddFavorite(
         FavoriteRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         // Check for duplicate (same title and same ingredients)
         var existingFavorite = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
 
@@ -94,6 +129,7 @@ public static class FavoriteEndpoints
 
         var favorite = new Favorite
         {
+            UserId = userId,
             Title = request.Title,
             Description = request.Description,
             CompleteDescription = request.CompleteDescription,
@@ -125,11 +161,18 @@ public static class FavoriteEndpoints
     private static async Task<IResult> UpdateFavorite(
         int id,
         FavoriteRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id);
+            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
         if (favorite == null)
         {
@@ -139,6 +182,7 @@ public static class FavoriteEndpoints
         // Check for duplicate (excluding current favorite)
         var existingFavorite = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList(),
             excludeId: id);
@@ -178,11 +222,20 @@ public static class FavoriteEndpoints
         return Results.Ok(ToResponse(favorite));
     }
 
-    private static async Task<IResult> DeleteFavorite(int id, CuisinierDbContext context)
+    private static async Task<IResult> DeleteFavorite(
+        int id,
+        ClaimsPrincipal user,
+        CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id);
+            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
 
         if (favorite == null)
         {
@@ -197,10 +250,18 @@ public static class FavoriteEndpoints
 
     private static async Task<IResult> CheckDuplicate(
         CheckDuplicateRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var exists = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList()) != null;
 
@@ -209,11 +270,19 @@ public static class FavoriteEndpoints
 
     private static async Task<IResult> CheckDuplicatesBatch(
         CheckDuplicatesBatchRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
-        // Load all favorites once for better performance
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        // Load all favorites once for better performance (filtered by userId)
         var allFavorites = await context.Favorites
             .Include(f => f.Ingredients)
+            .Where(f => f.UserId == userId)
             .ToListAsync();
 
         var matches = new List<RecipeDuplicateMatch>();
@@ -285,6 +354,7 @@ public static class FavoriteEndpoints
 
     private static async Task<Favorite?> CheckForDuplicateAsync(
         CuisinierDbContext context,
+        string userId,
         string title,
         List<(string Name, string Quantity)> ingredients,
         int? excludeId = null)
@@ -292,9 +362,10 @@ public static class FavoriteEndpoints
         // Normalize title for comparison (case-insensitive, trim)
         var normalizedTitle = title.Trim().ToLower();
 
-        // Load all favorites with ingredients into memory first
+        // Load all favorites with ingredients into memory first (filtered by userId)
         var allFavorites = await context.Favorites
             .Include(f => f.Ingredients)
+            .Where(f => f.UserId == userId)
             .ToListAsync();
 
         // Filter in memory (case-insensitive comparison)

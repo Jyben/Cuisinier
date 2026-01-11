@@ -1,12 +1,17 @@
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
 using Prometheus;
 using FluentValidation;
 using FluentValidation.AspNetCore;
+using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
 using Cuisinier.Infrastructure.Services;
 using Cuisinier.Api.Endpoints;
@@ -25,10 +30,72 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<CuisinierDbContext>(options =>
     options.UseSqlServer(connectionString, sqlServerOptions => sqlServerOptions.EnableRetryOnFailure()));
 
+// Add Identity
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    // Password settings
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredLength = 8;
+    options.Password.RequiredUniqueChars = 1;
+
+    // Lockout settings
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
+
+    // User settings
+    options.User.RequireUniqueEmail = true;
+    options.SignIn.RequireConfirmedEmail = true;
+
+    // Token settings
+    options.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultProvider;
+    options.Tokens.PasswordResetTokenProvider = TokenOptions.DefaultProvider;
+})
+.AddEntityFrameworkStores<CuisinierDbContext>()
+.AddDefaultTokenProviders();
+
+// Add JWT Authentication
+var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("Jwt:SecretKey not configured");
+if (jwtSecretKey.Length < 32)
+{
+    throw new InvalidOperationException("Jwt:SecretKey must be at least 32 characters long");
+}
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "CuisinierApi";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "CuisinierApp";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
+        ValidateIssuer = true,
+        ValidIssuer = jwtIssuer,
+        ValidateAudience = true,
+        ValidAudience = jwtAudience,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+builder.Services.AddAuthorization();
+
 // Register services
 var openAIApiKey = builder.Configuration["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey not configured");
 builder.Services.AddSingleton<IOpenAIService>(sp => 
     new OpenAIService(openAIApiKey, sp.GetRequiredService<ILogger<OpenAIService>>()));
+
+builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddScoped<Cuisinier.Infrastructure.Services.IRecipeService, Cuisinier.Infrastructure.Services.RecipeService>();
 builder.Services.AddScoped<BackgroundRecipeService>();
@@ -40,6 +107,7 @@ builder.Services.AddScoped<IRecipeQueryService, RecipeQueryService>();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddValidatorsFromAssemblyContaining<MenuParametersValidator>();
+builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
 
 // Add Memory Cache
 builder.Services.AddMemoryCache();
@@ -78,6 +146,17 @@ builder.Services.AddRateLimiter(options =>
             {
                 AutoReplenishment = true,
                 PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    // Strict rate limiting policy for authentication endpoints
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 5,           // 5 tentatives
                 Window = TimeSpan.FromMinutes(1)
             }));
 
@@ -125,6 +204,38 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Initialize roles (only if database is migrated)
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+        // Check if database exists and migrations are applied
+        if (await dbContext.Database.CanConnectAsync())
+        {
+            // Check if AspNetRoles table exists by trying to query it
+            var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+            if (!pendingMigrations.Any())
+            {
+                // Create "User" role if it doesn't exist
+                if (!await roleManager.RoleExistsAsync("User"))
+                {
+                    await roleManager.CreateAsync(new IdentityRole("User"));
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        // Log error but don't fail application startup
+        // This allows the application to start even if migrations haven't been applied yet
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Could not initialize roles. Make sure migrations have been applied. Error: {Message}", ex.Message);
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -142,6 +253,8 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseRateLimiter();
 
 // Prometheus Metrics
@@ -163,6 +276,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 app.MapHub<RecipeHub>("/recipeHub");
 
 // Map endpoints
+app.MapAuthEndpoints();
 app.MapMenuEndpoints();
 app.MapRecipeEndpoints();
 app.MapShoppingListEndpoints();

@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Cuisinier.Core.Entities;
 
 namespace Cuisinier.Infrastructure.Data;
 
-public class CuisinierDbContext : DbContext
+public class CuisinierDbContext : IdentityDbContext<ApplicationUser>
 {
     public CuisinierDbContext(DbContextOptions<CuisinierDbContext> options) : base(options)
     {
@@ -20,6 +22,7 @@ public class CuisinierDbContext : DbContext
     public DbSet<Dish> Dishes => Set<Dish>();
     public DbSet<DishIngredient> DishIngredients => Set<DishIngredient>();
     public DbSet<ShoppingListDish> ShoppingListDishes => Set<ShoppingListDish>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +33,12 @@ public class CuisinierDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.WeekStartDate);
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User)
+                  .WithMany(e => e.Menus)
+                  .HasForeignKey(e => e.UserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.NoAction);
             entity.HasMany(e => e.Recipes)
                   .WithOne(e => e.Menu)
                   .HasForeignKey(e => e.MenuId)
@@ -65,10 +74,16 @@ public class CuisinierDbContext : DbContext
         modelBuilder.Entity<ShoppingList>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User)
+                  .WithMany(e => e.ShoppingLists)
+                  .HasForeignKey(e => e.UserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.NoAction);
             entity.HasOne(e => e.Menu)
                   .WithMany()
                   .HasForeignKey(e => e.MenuId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                  .OnDelete(DeleteBehavior.NoAction);
             entity.HasMany(e => e.Items)
                   .WithOne(e => e.ShoppingList)
                   .HasForeignKey(e => e.ShoppingListId)
@@ -98,6 +113,12 @@ public class CuisinierDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Title);
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User)
+                  .WithMany(e => e.Favorites)
+                  .HasForeignKey(e => e.UserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.Ingredients)
                   .WithOne(e => e.Favorite)
                   .HasForeignKey(e => e.FavoriteId)
@@ -115,6 +136,12 @@ public class CuisinierDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Title);
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User)
+                  .WithMany(e => e.Dishes)
+                  .HasForeignKey(e => e.UserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.Ingredients)
                   .WithOne(e => e.Dish)
                   .HasForeignKey(e => e.DishId)
@@ -138,6 +165,19 @@ public class CuisinierDbContext : DbContext
             entity.HasOne(e => e.Dish)
                   .WithMany(e => e.ShoppingListDishes)
                   .HasForeignKey(e => e.DishId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RefreshToken configuration
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Token);
+            entity.HasOne(e => e.User)
+                  .WithMany(e => e.RefreshTokens)
+                  .HasForeignKey(e => e.UserId)
+                  .IsRequired()
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }

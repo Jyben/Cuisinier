@@ -1,0 +1,100 @@
+@page "/register"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@using Cuisinier.Core.DTOs
+@using Cuisinier.Core.Validators
+@using Cuisinier.App.Services
+@using MudBlazor
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Inscription</PageTitle>
+
+<PageHeader Title="Inscription" />
+
+<MudContainer MaxWidth="MaxWidth.Small">
+    <MudCard>
+        <MudCardContent>
+            <MudForm @ref="_form" @bind-IsValid="@success" @bind-Errors="@errors" Validation="@(new RegisterRequestValidator())">
+                <MudTextField T="string" 
+                              Label="Nom d'utilisateur" 
+                              Variant="Variant.Outlined" 
+                              @bind-Value="_request.UserName" 
+                              For="@(() => _request.UserName)" />
+                
+                <MudTextField T="string" 
+                              Label="Email" 
+                              Variant="Variant.Outlined" 
+                              @bind-Value="_request.Email" 
+                              For="@(() => _request.Email)" />
+                
+                <MudTextField T="string" 
+                              Label="Mot de passe" 
+                              Variant="Variant.Outlined" 
+                              InputType="InputType.Password" 
+                              @bind-Value="_request.Password" 
+                              For="@(() => _request.Password)" />
+                
+                <MudTextField T="string" 
+                              Label="Confirmer le mot de passe" 
+                              Variant="Variant.Outlined" 
+                              InputType="InputType.Password" 
+                              @bind-Value="_request.ConfirmPassword" 
+                              For="@(() => _request.ConfirmPassword)" />
+            </MudForm>
+        </MudCardContent>
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       OnClick="HandleRegister" 
+                       Disabled="@_loading">
+                Créer mon compte
+            </MudButton>
+            <MudButton Variant="Variant.Text" 
+                       Color="Color.Default" 
+                       OnClick="@(() => Navigation.NavigateTo("/login"))" 
+                       Disabled="@_loading">
+                Déjà un compte ? Se connecter
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private RegisterRequest _request = new();
+    private MudForm? _form;
+    private bool success;
+    private string[] errors = Array.Empty<string>();
+    private bool _loading = false;
+
+    private async Task HandleRegister()
+    {
+        if (_form == null) return;
+
+        await _form.Validate();
+        if (!success) return;
+
+        _loading = true;
+        try
+        {
+            var success = await AuthService.RegisterAsync(_request);
+            if (success)
+            {
+                Snackbar.Add("Compte créé avec succès ! Veuillez confirmer votre email avant de vous connecter.", Severity.Success);
+                Navigation.NavigateTo("/login");
+            }
+            else
+            {
+                Snackbar.Add("Erreur lors de la création du compte. Veuillez vérifier vos informations.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors de la création du compte : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

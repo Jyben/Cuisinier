@@ -1,6 +1,12 @@
 ﻿@inherits LayoutComponentBase
 @using MudBlazor
 @using Cuisinier.App.Themes
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Cuisinier.App.Services.AuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
 <MudThemeProvider Theme="@CuisinierTheme.GetTheme()" />
 <MudDialogProvider />
@@ -12,6 +18,42 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
         <MudText Typo="Typo.h6" Style="font-weight: 700; font-size: 1.2rem;">Cuisinier</MudText>
         <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-right: 8px;">
+                    <MudText Typo="Typo.body2" Style="text-transform: none;">@context.User.Identity?.Name</MudText>
+                    <MudMenu @bind-Open="_userMenuOpen" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                        <ActivatorContent>
+                            <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
+                                          Size="Size.Medium"
+                                          Variant="Variant.Text"
+                                          Color="Color.Inherit"
+                                          Edge="Edge.End"
+                                          OnClick="@((e) => _userMenuOpen = !_userMenuOpen)" />
+                        </ActivatorContent>
+                        <ChildContent>
+                            <MudMenuItem Disabled="true" Style="cursor: default;">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@GetUserDisplayName(context.User)</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: gray;">@GetUserEmail(context.User)</MudText>
+                                </MudStack>
+                            </MudMenuItem>
+                            <MudDivider />
+                            <MudMenuItem Icon="@Icons.Material.Filled.Person" Disabled="true">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2">Mon compte</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: gray;">À venir</MudText>
+                                </MudStack>
+                            </MudMenuItem>
+                            <MudDivider />
+                            <MudMenuItem OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout">
+                                Déconnexion
+                            </MudMenuItem>
+                        </ChildContent>
+                    </MudMenu>
+                </MudStack>
+            </Authorized>
+        </AuthorizeView>
     </MudAppBar>
     <MudDrawer @bind-Open="_drawerOpen" 
                ClipMode="DrawerClipMode.Always" 
@@ -28,9 +70,30 @@
 
 @code {
     bool _drawerOpen = true;
+    bool _userMenuOpen = false;
 
     void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    private async Task HandleLogout()
+    {
+        _userMenuOpen = false;
+        await AuthService.LogoutAsync();
+        ((Components.AuthStateProvider)AuthStateProvider).NotifyUserAuthenticationChanged();
+        Navigation.NavigateTo("/login");
+    }
+
+    private string GetUserDisplayName(ClaimsPrincipal user)
+    {
+        return user.Identity?.Name ?? user.FindFirst(ClaimTypes.Name)?.Value ?? "Utilisateur";
+    }
+
+    private string GetUserEmail(ClaimsPrincipal user)
+    {
+        return user.FindFirst(ClaimTypes.Email)?.Value 
+            ?? user.FindFirst("email")?.Value 
+            ?? string.Empty;
     }
 }

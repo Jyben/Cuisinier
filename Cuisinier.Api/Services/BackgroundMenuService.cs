@@ -32,7 +32,7 @@ public class BackgroundMenuService
         _logger = logger;
     }
 
-    public void StartGenerateMenuInBackground(int menuId, MenuGenerationRequest request)
+    public void StartGenerateMenuInBackground(int menuId, MenuGenerationRequest request, string userId)
     {
         // Launch in background without waiting
         _ = Task.Run(async () =>
@@ -61,22 +61,23 @@ public class BackgroundMenuService
                     {
                         // Parameters are already saved in StartMenuGenerationAsync, no need to save again
 
-                        // Get menu (it should already exist with the provided ID)
+                        // Get menu (it should already exist with the provided ID and userId)
                         var menu = await context.Menus
                             .Include(m => m.Recipes)
-                            .FirstOrDefaultAsync(m => m.Id == menuId);
+                            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
 
                         if (menu == null)
                         {
-                            throw new InvalidOperationException($"Menu {menuId} not found. It should have been created before starting background generation.");
+                            throw new InvalidOperationException($"Menu {menuId} not found for user {userId}. It should have been created before starting background generation.");
                         }
 
-                        // If existing recipes are provided, reuse them
+                        // If existing recipes are provided, reuse them (must belong to a menu owned by this user)
                         if (request.RecipeIds != null && request.RecipeIds.Any())
                         {
                             var existingRecipes = await context.Recipes
                                 .Include(r => r.Ingredients)
-                                .Where(r => request.RecipeIds.Contains(r.Id))
+                                .Include(r => r.Menu)
+                                .Where(r => request.RecipeIds.Contains(r.Id) && r.Menu != null && r.Menu.UserId == userId)
                                 .ToListAsync();
 
                             foreach (var existingRecipe in existingRecipes)
@@ -108,28 +109,34 @@ public class BackgroundMenuService
                         }
 
                         // Add newly generated recipes
-                        // Check for duplicates in favorites before adding
+                        // Check for duplicates in dishes and favorites before adding (for this user)
+                        var allDishes = await context.Dishes
+                            .Include(d => d.Ingredients)
+                            .Where(d => d.UserId == userId)
+                            .ToListAsync();
                         var allFavorites = await context.Favorites
                             .Include(f => f.Ingredients)
+                            .Where(f => f.UserId == userId)
                             .ToListAsync();
 
                         foreach (var recipeResponse in menuResponse.Recipes)
                         {
                             var recipe = recipeResponse.ToEntity(menu.Id);
                             
-                            // Check if this recipe already exists in favorites
+                            // Check if this recipe already exists in dishes first
                             var normalizedTitle = recipe.Title.Trim().ToLower();
-                            var matchingFavorites = allFavorites
-                                .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+                            var matchingDishes = allDishes
+                                .Where(d => d.Title.Trim().ToLower() == normalizedTitle)
                                 .ToList();
 
-                            foreach (var favorite in matchingFavorites)
+                            bool foundMatch = false;
+                            foreach (var dish in matchingDishes)
                             {
                                 // Check if ingredients match
-                                if (favorite.Ingredients.Count != recipe.Ingredients.Count)
+                                if (dish.Ingredients.Count != recipe.Ingredients.Count)
                                     continue;
 
-                                var favoriteIngredients = favorite.Ingredients
+                                var dishIngredients = dish.Ingredients
                                     .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
                                     .OrderBy(i => i.Name)
                                     .ThenBy(i => i.Quantity)
@@ -141,17 +148,97 @@ public class BackgroundMenuService
                                     .ThenBy(i => i.Quantity)
                                     .ToList();
 
-                                if (favoriteIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                                if (dishIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
                                 {
-                                    // Mark as from database and link to favorite
+                                    // Mark as from database and link to dish
                                     recipe.IsFromDatabase = true;
-                                    recipe.OriginalDishId = favorite.Id;
+                                    recipe.OriginalDishId = dish.Id;
+                                    recipe.DishId = dish.Id;
                                     _logger.LogInformation(
-                                        "Recipe '{Title}' matches existing favorite (ID: {FavoriteId})",
+                                        "Recipe '{Title}' matches existing dish (ID: {DishId})",
                                         recipe.Title,
-                                        favorite.Id);
+                                        dish.Id);
+                                    foundMatch = true;
                                     break;
                                 }
+                            }
+
+                            // If not found in dishes, check favorites
+                            if (!foundMatch)
+                            {
+                                var matchingFavorites = allFavorites
+                                    .Where(f => f.Title.Trim().ToLower() == normalizedTitle)
+                                    .ToList();
+
+                                foreach (var favorite in matchingFavorites)
+                                {
+                                    // Check if ingredients match
+                                    if (favorite.Ingredients.Count != recipe.Ingredients.Count)
+                                        continue;
+
+                                    var favoriteIngredients = favorite.Ingredients
+                                        .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                                        .OrderBy(i => i.Name)
+                                        .ThenBy(i => i.Quantity)
+                                        .ToList();
+
+                                    var recipeIngredients = recipe.Ingredients
+                                        .Select(i => (Name: i.Name.Trim().ToLower(), Quantity: i.Quantity.Trim().ToLower()))
+                                        .OrderBy(i => i.Name)
+                                        .ThenBy(i => i.Quantity)
+                                        .ToList();
+
+                                    if (favoriteIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
+                                    {
+                                        // Mark as from database and link to favorite
+                                        recipe.IsFromDatabase = true;
+                                        recipe.OriginalDishId = favorite.Id;
+                                        _logger.LogInformation(
+                                            "Recipe '{Title}' matches existing favorite (ID: {FavoriteId})",
+                                            recipe.Title,
+                                            favorite.Id);
+                                        foundMatch = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // If no match found, create a new Dish for this recipe
+                            if (!foundMatch)
+                            {
+                                var newDish = new Dish
+                                {
+                                    UserId = userId,
+                                    Title = recipe.Title,
+                                    Description = recipe.Description,
+                                    CompleteDescription = recipe.CompleteDescription,
+                                    DetailedRecipe = recipe.DetailedRecipe,
+                                    ImageUrl = recipe.ImageUrl,
+                                    PreparationTime = recipe.PreparationTime,
+                                    CookingTime = recipe.CookingTime,
+                                    Kcal = recipe.Kcal,
+                                    Servings = recipe.Servings,
+                                    CreatedAt = DateTime.UtcNow,
+                                    Ingredients = recipe.Ingredients.Select(i => new DishIngredient
+                                    {
+                                        Name = i.Name,
+                                        Quantity = i.Quantity,
+                                        Category = i.Category
+                                    }).ToList()
+                                };
+
+                                context.Dishes.Add(newDish);
+                                await context.SaveChangesAsync();
+
+                                // Link recipe to the new dish
+                                recipe.DishId = newDish.Id;
+                                recipe.OriginalDishId = newDish.Id;
+                                recipe.IsFromDatabase = true;
+
+                                _logger.LogInformation(
+                                    "Created new dish for recipe '{Title}' (DishId: {DishId})",
+                                    recipe.Title,
+                                    newDish.Id);
                             }
                             
                             menu.Recipes.Add(recipe);
@@ -176,13 +263,13 @@ public class BackgroundMenuService
                 var completeMenu = await context.Menus
                     .Include(m => m.Recipes)
                         .ThenInclude(r => r.Ingredients)
-                    .FirstOrDefaultAsync(m => m.Id == menuId);
+                    .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
 
                 if (completeMenu != null)
                 {
                     // Invalidate cache
-                    _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
-                    _cache.Remove(AllMenusCacheKey);
+                    _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
+                    _cache.Remove($"{AllMenusCacheKey}_{userId}");
                     
                     // Send success notification via SignalR
                     var menuResponseDto = completeMenu.ToResponse();

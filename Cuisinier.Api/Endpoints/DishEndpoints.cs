@@ -1,7 +1,9 @@
+using System.Security.Claims;
 using Cuisinier.Core.DTOs;
 using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
 using Cuisinier.Infrastructure.Mappings;
+using Cuisinier.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cuisinier.Api.Endpoints;
@@ -15,46 +17,60 @@ public static class DishEndpoints
         group.MapGet("", GetAllDishes)
             .WithName("GetAllDishes")
             .WithSummary("Get all dishes with optional filtering")
-            .Produces<DishListResponse>(StatusCodes.Status200OK);
+            .Produces<DishListResponse>(StatusCodes.Status200OK)
+            .RequireAuthorization();
 
         group.MapGet("/{id:int}", GetDish)
             .WithName("GetDish")
             .WithSummary("Get dish by ID")
             .Produces<DishResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
 
         group.MapPost("", AddDish)
             .WithName("AddDish")
             .WithSummary("Add a new dish")
             .Produces<DishResponse>(StatusCodes.Status201Created)
             .Produces(StatusCodes.Status400BadRequest)
-            .Produces(StatusCodes.Status409Conflict);
+            .Produces(StatusCodes.Status409Conflict)
+            .RequireAuthorization();
 
         group.MapPut("/{id:int}", UpdateDish)
             .WithName("UpdateDish")
             .WithSummary("Update a dish")
             .Produces<DishResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
-            .Produces(StatusCodes.Status409Conflict);
+            .Produces(StatusCodes.Status409Conflict)
+            .RequireAuthorization();
 
         group.MapDelete("/{id:int}", DeleteDish)
             .WithName("DeleteDish")
             .WithSummary("Delete a dish")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
 
         group.MapPost("/check-duplicate", CheckDuplicate)
             .WithName("CheckDishDuplicate")
             .WithSummary("Check if a dish already exists")
-            .Produces<bool>(StatusCodes.Status200OK);
+            .Produces<bool>(StatusCodes.Status200OK)
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> GetAllDishes(
         [AsParameters] DishFilterRequest filter,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var query = context.Dishes
             .Include(d => d.Ingredients)
+            .Where(d => d.UserId == userId)
             .AsQueryable();
 
         // Apply search term filter
@@ -150,11 +166,20 @@ public static class DishEndpoints
         return Results.Ok(response);
     }
 
-    private static async Task<IResult> GetDish(int id, CuisinierDbContext context)
+    private static async Task<IResult> GetDish(
+        int id,
+        ClaimsPrincipal user,
+        CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id);
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
 
         if (dish == null)
         {
@@ -166,11 +191,19 @@ public static class DishEndpoints
 
     private static async Task<IResult> AddDish(
         DishRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         // Check for duplicate (same title and same ingredients)
         var existingDish = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
 
@@ -181,6 +214,7 @@ public static class DishEndpoints
 
         var dish = new Dish
         {
+            UserId = userId,
             Title = request.Title,
             Description = request.Description,
             CompleteDescription = request.CompleteDescription,
@@ -212,11 +246,18 @@ public static class DishEndpoints
     private static async Task<IResult> UpdateDish(
         int id,
         DishRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id);
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
 
         if (dish == null)
         {
@@ -226,6 +267,7 @@ public static class DishEndpoints
         // Check for duplicate (excluding current dish)
         var existingDish = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList(),
             excludeId: id);
@@ -265,11 +307,20 @@ public static class DishEndpoints
         return Results.Ok(dish.ToResponse());
     }
 
-    private static async Task<IResult> DeleteDish(int id, CuisinierDbContext context)
+    private static async Task<IResult> DeleteDish(
+        int id,
+        ClaimsPrincipal user,
+        CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var dish = await context.Dishes
             .Include(d => d.Ingredients)
-            .FirstOrDefaultAsync(d => d.Id == id);
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
 
         if (dish == null)
         {
@@ -284,10 +335,18 @@ public static class DishEndpoints
 
     private static async Task<IResult> CheckDuplicate(
         CheckDuplicateRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var exists = await CheckForDuplicateAsync(
             context,
+            userId,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList()) != null;
 
@@ -296,6 +355,7 @@ public static class DishEndpoints
 
     private static async Task<Dish?> CheckForDuplicateAsync(
         CuisinierDbContext context,
+        string userId,
         string title,
         List<(string Name, string Quantity)> ingredients,
         int? excludeId = null)
@@ -303,9 +363,10 @@ public static class DishEndpoints
         // Normalize title for comparison (case-insensitive, trim)
         var normalizedTitle = title.Trim().ToLower();
 
-        // Load all dishes with ingredients into memory first
+        // Load all dishes with ingredients into memory first (filtered by userId)
         var allDishes = await context.Dishes
             .Include(d => d.Ingredients)
+            .Where(d => d.UserId == userId)
             .ToListAsync();
 
         // Filter in memory (case-insensitive comparison)

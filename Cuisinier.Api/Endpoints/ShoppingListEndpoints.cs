@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using Cuisinier.Core.DTOs;
 using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
 using Cuisinier.Infrastructure.Services;
 using Cuisinier.Infrastructure.Mappings;
+using Cuisinier.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cuisinier.Api.Endpoints;
@@ -14,31 +16,46 @@ public static class ShoppingListEndpoints
         var group = app.MapGroup("/api/shoppinglist");
 
         group.MapGet("/{menuId:int}", GetShoppingList)
-            .WithName("GetShoppingList");
+            .WithName("GetShoppingList")
+            .RequireAuthorization();
 
         group.MapPost("/{menuId:int}/item", AddItem)
-            .WithName("AddItem");
+            .WithName("AddItem")
+            .RequireAuthorization();
 
         group.MapDelete("/{menuId:int}/item/{itemId:int}", DeleteItem)
-            .WithName("DeleteItem");
+            .WithName("DeleteItem")
+            .RequireAuthorization();
 
         group.MapDelete("/{menuId:int}", DeleteShoppingList)
-            .WithName("DeleteShoppingList");
+            .WithName("DeleteShoppingList")
+            .RequireAuthorization();
 
         group.MapPost("/{menuId:int}/validate", ValidateShoppingList)
-            .WithName("ValidateShoppingList");
+            .WithName("ValidateShoppingList")
+            .RequireAuthorization();
 
         group.MapPost("/{menuId:int}/generate-detailed-recipes", GenerateDetailedRecipes)
-            .WithName("GenerateDetailedRecipes");
+            .WithName("GenerateDetailedRecipes")
+            .RequireAuthorization();
     }
 
     private static async Task<IResult> GetShoppingList(
         int menuId,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var shoppingList = await context.ShoppingLists
             .Include(l => l.Items)
-            .FirstOrDefaultAsync(l => l.MenuId == menuId);
+            .Include(l => l.Menu)
+            .Where(l => l.MenuId == menuId && l.UserId == userId)
+            .FirstOrDefaultAsync();
 
         if (shoppingList == null)
         {
@@ -51,16 +68,33 @@ public static class ShoppingListEndpoints
     private static async Task<IResult> AddItem(
         int menuId,
         AddItemRequest request,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        // Check that menu belongs to user
+        var menu = await context.Menus
+            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+
+        if (menu == null)
+        {
+            return Results.NotFound();
+        }
+
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
 
         if (shoppingList == null)
         {
             // Create shopping list if it doesn't exist
             shoppingList = new ShoppingList
             {
+                UserId = userId,
                 MenuId = menuId,
                 CreationDate = DateTime.UtcNow
             };
@@ -89,10 +123,17 @@ public static class ShoppingListEndpoints
     private static async Task<IResult> DeleteItem(
         int menuId,
         int itemId,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
 
         if (shoppingList == null)
         {
@@ -115,10 +156,17 @@ public static class ShoppingListEndpoints
 
     private static async Task<IResult> DeleteShoppingList(
         int menuId,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
 
         if (shoppingList == null)
         {
@@ -133,11 +181,18 @@ public static class ShoppingListEndpoints
 
     private static async Task<IResult> ValidateShoppingList(
         int menuId,
+        ClaimsPrincipal user,
         CuisinierDbContext context)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var shoppingList = await context.ShoppingLists
             .Include(l => l.Items)
-            .FirstOrDefaultAsync(l => l.MenuId == menuId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
 
         if (shoppingList == null)
         {
@@ -150,14 +205,21 @@ public static class ShoppingListEndpoints
 
     private static async Task<IResult> GenerateDetailedRecipes(
         int menuId,
+        ClaimsPrincipal user,
         CuisinierDbContext context,
         IOpenAIService openAIService,
         ILogger<Program> logger)
     {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
         var menu = await context.Menus
             .Include(m => m.Recipes)
                 .ThenInclude(r => r.Ingredients)
-            .FirstOrDefaultAsync(m => m.Id == menuId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
 
         if (menu == null)
         {
