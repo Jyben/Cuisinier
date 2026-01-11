@@ -84,6 +84,7 @@ services:
       - /usr/share/nginx/html:/out
     command: >
       bash -c "
+      dotnet workload install wasm-tools &&
       dotnet restore Cuisinier.App/Cuisinier.App.csproj &&
       dotnet publish Cuisinier.App/Cuisinier.App.csproj -c Release -o /tmp/publish &&
       rm -rf /out/* &&
