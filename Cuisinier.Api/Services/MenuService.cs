@@ -327,9 +327,9 @@ public class MenuService : IMenuService
                         await _context.SaveChangesAsync();
 
                         // Link recipe to the new dish
+                        // Don't change IsFromDatabase - keep it as false for LLM-generated recipes
                         recipe.DishId = newDish.Id;
                         recipe.OriginalDishId = newDish.Id;
-                        recipe.IsFromDatabase = true;
 
                         _logger.LogInformation(
                             "Created new dish for recipe '{Title}' (DishId: {DishId})",
@@ -1084,10 +1084,23 @@ public class MenuService : IMenuService
             _cache.Remove($"{AllMenusCacheKey}_{userId}");
 
             // Launch detailed recipe generation in background (only for non-favorite recipes without detail)
+            var totalRecipes = menu.Recipes.Count;
+            var fromDatabaseCount = menu.Recipes.Count(r => r.IsFromDatabase);
+            var withDetailedRecipe = menu.Recipes.Count(r => !string.IsNullOrEmpty(r.DetailedRecipe));
+            
+            _logger.LogInformation(
+                "Menu {MenuId}: Total recipes: {Total}, FromDatabase: {FromDb}, WithDetailedRecipe: {WithDetail}",
+                menuId, totalRecipes, fromDatabaseCount, withDetailedRecipe);
+            
             var recipesWithoutDetail = menu.Recipes
                 .Where(r => !r.IsFromDatabase && string.IsNullOrEmpty(r.DetailedRecipe))
                 .Select(r => r.Id)
                 .ToList();
+
+            _logger.LogInformation(
+                "Menu {MenuId}: Recipes without detail (LLM-generated): {Count}",
+                menuId,
+                recipesWithoutDetail.Count);
 
             if (recipesWithoutDetail.Any())
             {
@@ -1096,6 +1109,12 @@ public class MenuService : IMenuService
                     menuId,
                     recipesWithoutDetail.Count);
                 await _backgroundRecipeService.GenerateDetailedRecipesAsync(menuId, recipesWithoutDetail);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "No recipes to generate detailed recipes for. MenuId: {MenuId}",
+                    menuId);
             }
         }
         else
@@ -1158,7 +1177,8 @@ public class MenuService : IMenuService
             {
                 recipe.DishId = matchedDish.Id;
                 recipe.OriginalDishId ??= matchedDish.Id;
-                recipe.IsFromDatabase = true;
+                // Don't change IsFromDatabase here - only link to existing dish
+                // IsFromDatabase should only be true if recipe actually came from database
                 anyChanges = true;
                 continue;
             }

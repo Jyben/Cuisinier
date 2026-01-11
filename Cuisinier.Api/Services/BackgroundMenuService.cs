@@ -150,8 +150,8 @@ public class BackgroundMenuService
 
                                 if (dishIngredients.SequenceEqual(recipeIngredients, new IngredientEqualityComparer()))
                                 {
-                                    // Mark as from database and link to dish
-                                    recipe.IsFromDatabase = true;
+                                    // Link to dish but don't change IsFromDatabase
+                                    // IsFromDatabase should only be true if recipe actually came from database
                                     recipe.OriginalDishId = dish.Id;
                                     recipe.DishId = dish.Id;
                                     _logger.LogInformation(
@@ -231,9 +231,9 @@ public class BackgroundMenuService
                                 await context.SaveChangesAsync();
 
                                 // Link recipe to the new dish
+                                // Don't change IsFromDatabase - keep it as false for LLM-generated recipes
                                 recipe.DishId = newDish.Id;
                                 recipe.OriginalDishId = newDish.Id;
-                                recipe.IsFromDatabase = true;
 
                                 _logger.LogInformation(
                                     "Created new dish for recipe '{Title}' (DishId: {DishId})",

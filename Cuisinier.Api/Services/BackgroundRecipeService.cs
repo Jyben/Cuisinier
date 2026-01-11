@@ -56,6 +56,8 @@ public class BackgroundRecipeService
     {
         try
         {
+            _logger.LogInformation("Starting detailed recipe generation for Recipe {RecipeId} in Menu {MenuId}", recipeId, menuId);
+            
             // Each recipe gets its own scope to avoid DbContext threading issues
             using var scope = _scopeFactory.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<CuisinierDbContext>();
@@ -67,9 +69,11 @@ public class BackgroundRecipeService
 
             if (recipe == null || !string.IsNullOrEmpty(recipe.DetailedRecipe))
             {
+                _logger.LogInformation("Recipe {RecipeId} is null or already has DetailedRecipe, skipping", recipeId);
                 return;
             }
 
+            _logger.LogInformation("Generating detailed recipe for Recipe {RecipeId}", recipeId);
             var recipeResponse = recipe.ToResponse();
             var detailedRecipe = await openAIService.GenerateDetailedRecipeAsync(
                 recipe.Title,
@@ -77,31 +81,52 @@ public class BackgroundRecipeService
                 recipe.Description
             );
 
+            _logger.LogInformation("Detailed recipe generated for Recipe {RecipeId}, saving to database", recipeId);
             recipe.DetailedRecipe = detailedRecipe;
             context.Entry(recipe).Property(r => r.DetailedRecipe).IsModified = true;
             
-            // Update associated Dish if it exists
-            var dishIdToUpdate = recipe.DishId ?? recipe.OriginalDishId;
-            if (dishIdToUpdate.HasValue)
+            // Update associated Dish if it exists (don't fail if this fails)
+            try
             {
-                var dish = await context.Dishes
-                    .FirstOrDefaultAsync(d => d.Id == dishIdToUpdate.Value);
-                
-                if (dish != null)
+                var dishIdToUpdate = recipe.DishId ?? recipe.OriginalDishId;
+                if (dishIdToUpdate.HasValue)
                 {
-                    dish.DetailedRecipe = detailedRecipe;
-                    dish.UpdatedAt = DateTime.UtcNow;
-                    context.Entry(dish).Property(d => d.DetailedRecipe).IsModified = true;
-                    context.Entry(dish).Property(d => d.UpdatedAt).IsModified = true;
+                    _logger.LogInformation("Recipe {RecipeId} has DishId {DishId}, updating Dish", recipeId, dishIdToUpdate.Value);
+                    var dish = await context.Dishes
+                        .FirstOrDefaultAsync(d => d.Id == dishIdToUpdate.Value);
                     
-                    _logger.LogInformation(
-                        "Updated DetailedRecipe for Dish {DishId} associated with Recipe {RecipeId}",
-                        dishIdToUpdate.Value,
-                        recipeId);
+                    if (dish != null)
+                    {
+                        dish.DetailedRecipe = detailedRecipe;
+                        dish.UpdatedAt = DateTime.UtcNow;
+                        context.Entry(dish).Property(d => d.DetailedRecipe).IsModified = true;
+                        context.Entry(dish).Property(d => d.UpdatedAt).IsModified = true;
+                        
+                        _logger.LogInformation(
+                            "Updated DetailedRecipe for Dish {DishId} associated with Recipe {RecipeId}",
+                            dishIdToUpdate.Value,
+                            recipeId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Dish {DishId} not found for Recipe {RecipeId}", dishIdToUpdate.Value, recipeId);
+                    }
                 }
+                else
+                {
+                    _logger.LogInformation("Recipe {RecipeId} has no DishId or OriginalDishId, skipping Dish update", recipeId);
+                }
+            }
+            catch (Exception dishEx)
+            {
+                // Log but don't fail the recipe generation if dish update fails
+                _logger.LogWarning(dishEx, 
+                    "Failed to update Dish for Recipe {RecipeId}, but continuing with recipe update",
+                    recipeId);
             }
             
             await context.SaveChangesAsync();
+            _logger.LogInformation("Saved DetailedRecipe for Recipe {RecipeId} to database", recipeId);
 
             // Reload recipe with all relationships for mapping
             var completeRecipe = await context.Recipes
@@ -116,17 +141,30 @@ public class BackgroundRecipeService
                 _cache.Remove(AllMenusCacheKey);
                 
                 // Send update via SignalR
+                _logger.LogInformation("Sending SignalR notification for Recipe {RecipeId}", recipeId);
                 var updatedRecipe = completeRecipe.ToResponse();
                 await _hubContext.Clients.Group($"menu-{menuId}")
                     .SendAsync("RecipeDetailedGenerated", updatedRecipe);
+                _logger.LogInformation("SignalR notification sent for Recipe {RecipeId}", recipeId);
+            }
+            else
+            {
+                _logger.LogWarning("Could not reload Recipe {RecipeId} after saving", recipeId);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during detailed recipe generation for {RecipeId}", recipeId);
             // Send error notification
-            await _hubContext.Clients.Group($"menu-{menuId}")
-                .SendAsync("RecipeGenerationError", recipeId);
+            try
+            {
+                await _hubContext.Clients.Group($"menu-{menuId}")
+                    .SendAsync("RecipeGenerationError", recipeId);
+            }
+            catch (Exception hubEx)
+            {
+                _logger.LogError(hubEx, "Failed to send SignalR error notification for Recipe {RecipeId}", recipeId);
+            }
         }
     }
 

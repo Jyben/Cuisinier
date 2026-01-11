@@ -332,6 +332,29 @@ public static class DishEndpoints
             return Results.NotFound();
         }
 
+        // Check if any Recipes reference this Dish via OriginalDishId
+        // (DishId is handled automatically with SetNull behavior)
+        var recipesWithOriginalDish = await context.Recipes
+            .Where(r => r.OriginalDishId == id)
+            .ToListAsync();
+
+        // Update Recipes to remove OriginalDishId reference before deleting the Dish
+        // (OriginalDishId has NoAction delete behavior, so we must handle it manually)
+        foreach (var recipe in recipesWithOriginalDish)
+        {
+            recipe.OriginalDishId = null;
+        }
+
+        // Also check for ShoppingListDish references (they should be cascade deleted, but let's be safe)
+        var shoppingListDishes = await context.Set<ShoppingListDish>()
+            .Where(sld => sld.DishId == id)
+            .ToListAsync();
+
+        if (shoppingListDishes.Any())
+        {
+            context.Set<ShoppingListDish>().RemoveRange(shoppingListDishes);
+        }
+
         context.Dishes.Remove(dish);
         await context.SaveChangesAsync();
 
