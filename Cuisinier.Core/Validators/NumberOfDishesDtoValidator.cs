@@ -1,5 +1,5 @@
 using FluentValidation;
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 
 namespace Cuisinier.Core.Validators;
 

@@ -20,7 +20,7 @@ using Cuisinier.Api.Hubs;
 using Cuisinier.Api.Services;
 using Cuisinier.Api.Middleware;
 using Cuisinier.Api.HealthChecks;
-using Cuisinier.Core.Validators;
+using Cuisinier.Shared.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 

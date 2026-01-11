@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Cuisinier.Core\Cuisinier.Core.csproj" />
+    <ProjectReference Include="..\Cuisinier.Shared\Cuisinier.Shared.csproj" />
   </ItemGroup>
 
 </Project>

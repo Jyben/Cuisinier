@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 using OpenAI.Chat;
 
 namespace Cuisinier.Infrastructure.Services;

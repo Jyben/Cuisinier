@@ -1,4 +1,4 @@
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 using Cuisinier.Core.Entities;
 
 namespace Cuisinier.Infrastructure.Services;
