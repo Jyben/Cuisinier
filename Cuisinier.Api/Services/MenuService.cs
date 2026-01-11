@@ -849,6 +849,50 @@ public class MenuService : IMenuService
             userId);
     }
 
+    public async Task<RecipeResponse> ToggleRecipeCookedStatusAsync(int menuId, int recipeId, string userId)
+    {
+        _logger.LogInformation(
+            "Toggling cooked status. MenuId: {MenuId}, RecipeId: {RecipeId}",
+            menuId,
+            recipeId);
+
+        // Verify menu belongs to user
+        var menu = await _context.Menus
+            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+
+        if (menu == null)
+        {
+            throw new KeyNotFoundException($"Menu {menuId} not found for user {userId}");
+        }
+
+        // Load recipe
+        var recipe = await _context.Recipes
+            .Include(r => r.Ingredients)
+            .FirstOrDefaultAsync(r => r.Id == recipeId && r.MenuId == menuId);
+
+        if (recipe == null)
+        {
+            throw new KeyNotFoundException($"Recipe {recipeId} not found in menu {menuId}");
+        }
+
+        // Toggle cooked status
+        recipe.IsCooked = !recipe.IsCooked;
+        await _context.SaveChangesAsync();
+
+        // Invalidate cache
+        _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
+        _cache.Remove($"{AllMenusCacheKey}_{userId}");
+
+        _logger.LogInformation(
+            "Recipe cooked status toggled successfully. MenuId: {MenuId}, RecipeId: {RecipeId}, IsCooked: {IsCooked}, UserId: {UserId}",
+            menuId,
+            recipeId,
+            recipe.IsCooked,
+            userId);
+
+        return recipe.ToResponse();
+    }
+
     public async Task DeleteMenuAsync(int menuId, string userId)
     {
         _logger.LogInformation("Deleting menu. MenuId: {MenuId}", menuId);

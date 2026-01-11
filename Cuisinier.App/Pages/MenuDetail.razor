@@ -35,6 +35,7 @@
                     ShowActions="@_menuValid"
                     ShowFavoriteButton="@_menuValid"
                     OnDelete="DeleteRecipe"
+                    OnToggleCooked="ToggleRecipeCooked"
                     MenuValid="@_menuValid"
                     IsGenerating="@IsGenerating(recipe.Id)" />
             </MudItem>
@@ -284,6 +285,33 @@
             {
                 Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task ToggleRecipeCooked(int recipeId)
+    {
+        try
+        {
+            var updatedRecipe = await MenuApi.ToggleRecipeCookedStatusAsync(MenuId, recipeId);
+            
+            // Update the recipe in the menu
+            if (_menu != null)
+            {
+                var index = _menu.Recipes.FindIndex(r => r.Id == recipeId);
+                if (index >= 0)
+                {
+                    _menu.Recipes[index] = updatedRecipe;
+                }
+            }
+
+            var message = updatedRecipe.IsCooked 
+                ? "Plat marqué comme cuisiné" 
+                : "Plat non marqué comme cuisiné";
+            Snackbar.Add(message, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors de la mise à jour : {ex.Message}", Severity.Error);
         }
     }
 

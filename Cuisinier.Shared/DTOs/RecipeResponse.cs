@@ -16,5 +16,6 @@ public class RecipeResponse
     public List<IngredientResponse> Ingredients { get; set; } = new();
     public bool IsFromDatabase { get; set; }
     public int? OriginalDishId { get; set; }
+    public bool IsCooked { get; set; }
 }
 

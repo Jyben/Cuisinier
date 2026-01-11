@@ -84,6 +84,14 @@ public static class MenuEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .RequireAuthorization();
 
+        group.MapPost("/{menuId:int}/recipe/{recipeId:int}/toggle-cooked", ToggleRecipeCookedStatus)
+            .WithName("ToggleRecipeCookedStatus")
+            .WithSummary("Toggle cooked status of a recipe")
+            .WithDescription("Toggles the cooked status of a recipe in a menu.")
+            .Produces<RecipeResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
+
         group.MapDelete("/{menuId:int}", DeleteMenu)
             .WithName("DeleteMenu")
             .WithSummary("Delete a menu")
@@ -256,6 +264,22 @@ public static class MenuEndpoints
 
         await menuService.DeleteRecipeAsync(menuId, recipeId, userId);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> ToggleRecipeCookedStatus(
+        int menuId,
+        int recipeId,
+        ClaimsPrincipal user,
+        IMenuService menuService)
+    {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var recipe = await menuService.ToggleRecipeCookedStatusAsync(menuId, recipeId, userId);
+        return Results.Ok(recipe);
     }
 
     private static async Task<IResult> DeleteMenu(

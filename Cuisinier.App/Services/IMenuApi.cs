@@ -32,6 +32,9 @@ public interface IMenuApi
     [Delete("/api/menu/{menuId}/recipe/{recipeId}")]
     Task DeleteRecipeAsync(int menuId, int recipeId);
     
+    [Post("/api/menu/{menuId}/recipe/{recipeId}/toggle-cooked")]
+    Task<RecipeResponse> ToggleRecipeCookedStatusAsync(int menuId, int recipeId);
+    
     [Delete("/api/menu/{menuId}")]
     Task DeleteMenuAsync(int menuId);
     
