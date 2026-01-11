@@ -6,8 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- Disable trimming for Blazor WebAssembly to avoid issues with reflection-based libraries -->
-    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
