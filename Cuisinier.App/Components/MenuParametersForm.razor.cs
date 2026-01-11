@@ -42,10 +42,13 @@ namespace Cuisinier.App.Components
         private List<int?> _numberOfDishTypesValues = new();
         
         // Desired foods
-        private List<MenuParametersFormComponents.DesiredFoodsSection.DesiredFoodItem> _desiredFoodItems = new();
+        private List<string> _desiredFoods = new();
         
         // New banned food
         private string _newBannedFood = "";
+        
+        // New desired food
+        private string _newDesiredFood = "";
         
         // Seasonal options
         private string _seasonalFoodOption = "toujours";
@@ -174,10 +177,7 @@ namespace Cuisinier.App.Components
             }
             
             // Initialize desired foods
-            _desiredFoodItems = Parameters.DesiredFoods.Select(a => new MenuParametersFormComponents.DesiredFoodsSection.DesiredFoodItem 
-            { 
-                Food = a.Food
-            }).ToList();
+            _desiredFoods = Parameters.DesiredFoods.Select(a => a.Food).ToList();
             
             // Initialize season option - default to "toujours" if nothing is returned by API
             // Only use "jamais" if SeasonalFoods is explicitly false AND parameters were loaded from API
@@ -272,15 +272,21 @@ namespace Cuisinier.App.Components
 
         public async Task AddDesiredFood()
         {
-            _desiredFoodItems.Add(new MenuParametersFormComponents.DesiredFoodsSection.DesiredFoodItem { Food = "" });
+            var food = _newDesiredFood?.Trim();
+            if (!string.IsNullOrWhiteSpace(food) && !_desiredFoods.Contains(food, StringComparer.OrdinalIgnoreCase))
+            {
+                _desiredFoods.Add(food);
+                _newDesiredFood = "";
+                StateHasChanged(); // Force UI update
+            }
             await Task.CompletedTask;
         }
 
         public async Task DeleteDesiredFood(int index)
         {
-            if (index < _desiredFoodItems.Count)
+            if (index < _desiredFoods.Count)
             {
-                _desiredFoodItems.RemoveAt(index);
+                _desiredFoods.RemoveAt(index);
             }
             await Task.CompletedTask;
         }
@@ -475,11 +481,11 @@ namespace Cuisinier.App.Components
             
             // Sync desired foods
             Parameters.DesiredFoods.Clear();
-            foreach (var item in _desiredFoodItems)
+            foreach (var food in _desiredFoods)
             {
-                if (!string.IsNullOrWhiteSpace(item.Food))
+                if (!string.IsNullOrWhiteSpace(food))
                 {
-                    Parameters.DesiredFoods.Add(new DesiredFoodDto { Food = item.Food, Weight = 0 });
+                    Parameters.DesiredFoods.Add(new DesiredFoodDto { Food = food, Weight = 0 });
                 }
             }
             

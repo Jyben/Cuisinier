@@ -80,6 +80,19 @@
                                     }
                                 </div>
                             </MudExpansionPanel>
+                            @if (!string.IsNullOrEmpty(favorite.DetailedRecipe))
+                            {
+                                <MudButton 
+                                    Variant="Variant.Text" 
+                                    Size="Size.Small" 
+                                    Color="Color.Primary" 
+                                    FullWidth="true"
+                                    OnClick="@(() => OpenDetailedRecipe(favorite))"
+                                    StartIcon="@Icons.Material.Filled.Receipt"
+                                    Class="mt-2 recette-detail-button">
+                                    Voir la recette détaillée
+                                </MudButton>
+                            }
                         </MudExpansionPanels>
                     </MudCardContent>
                     <MudCardActions Class="pa-3 pt-0">
@@ -196,6 +209,39 @@ else if (!_loading)
             }
         }
     }
+
+    private async Task OpenDetailedRecipe(FavoriteResponse favorite)
+    {
+        var recipe = new RecipeResponse
+        {
+            Id = favorite.Id,
+            Title = favorite.Title,
+            Description = favorite.Description,
+            CompleteDescription = favorite.CompleteDescription,
+            DetailedRecipe = favorite.DetailedRecipe,
+            ImageUrl = favorite.ImageUrl,
+            PreparationTime = favorite.PreparationTime,
+            CookingTime = favorite.CookingTime,
+            Kcal = favorite.Kcal,
+            Servings = favorite.Servings,
+            Ingredients = favorite.Ingredients,
+            IsFromDatabase = true
+        };
+
+        var parameters = new DialogParameters<RecipeDetailsDialog>
+        {
+            { x => x.Recipe, recipe }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<RecipeDetailsDialog>("Recette détaillée", parameters, options);
+    }
 }
 
 <style>
@@ -228,6 +274,13 @@ else if (!_loading)
         text-transform: none;
         font-weight: 500;
         letter-spacing: 0.3px;
+    }
+
+    .recette-detail-button {
+        text-transform: none;
+        font-weight: 500;
+        justify-content: flex-start;
+        margin-top: 0.5rem;
     }
 
     /* Round bottom corners of last expansion panel */

@@ -102,36 +102,33 @@
                     }
                 </div>
             </MudExpansionPanel>
-            @if (MenuValid)
+            @if (IsGenerating && MenuValid)
             {
-                @if (IsGenerating)
-                {
-                    <MudButton 
-                        Variant="Variant.Text" 
-                        Size="Size.Small" 
-                        Color="Color.Primary" 
-                        FullWidth="true"
-                        Disabled="true"
-                        Class="mt-2 recette-detail-button">
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="width: 16px; height: 16px;" />
-                            <span style="opacity: 0.7;">Génération de la recette détaillée...</span>
-                        </MudStack>
-                    </MudButton>
-                }
-                else if (!string.IsNullOrEmpty(Recipe.DetailedRecipe))
-                {
-                    <MudButton 
-                        Variant="Variant.Text" 
-                        Size="Size.Small" 
-                        Color="Color.Primary" 
-                        FullWidth="true"
-                        OnClick="OpenDetailedRecipe"
-                        StartIcon="@Icons.Material.Filled.Receipt"
-                        Class="mt-2 recette-detail-button">
-                        Voir la recette détaillée
-                    </MudButton>
-                }
+                <MudButton 
+                    Variant="Variant.Text" 
+                    Size="Size.Small" 
+                    Color="Color.Primary" 
+                    FullWidth="true"
+                    Disabled="true"
+                    Class="mt-2 recette-detail-button">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="width: 16px; height: 16px;" />
+                        <span style="opacity: 0.7;">Génération de la recette détaillée...</span>
+                    </MudStack>
+                </MudButton>
+            }
+            else if (!string.IsNullOrEmpty(Recipe.DetailedRecipe))
+            {
+                <MudButton 
+                    Variant="Variant.Text" 
+                    Size="Size.Small" 
+                    Color="Color.Primary" 
+                    FullWidth="true"
+                    OnClick="OpenDetailedRecipe"
+                    StartIcon="@Icons.Material.Filled.Receipt"
+                    Class="mt-2 recette-detail-button">
+                    Voir la recette détaillée
+                </MudButton>
             }
         </MudExpansionPanels>
     </MudCardContent>

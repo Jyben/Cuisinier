@@ -50,10 +50,11 @@ else
 
                 <!-- Aliments souhaités -->
                 <DesiredFoodsSection 
-                    Items="_desiredFoodItems"
+                    DesiredFoods="_desiredFoods"
+                    NewFood="@_newDesiredFood"
+                    NewFoodChanged="@((string value) => _newDesiredFood = value)"
                     OnRemove="DeleteDesiredFood"
-                    OnAdd="AddDesiredFood"
-                    OnChange="StateHasChanged" />
+                    OnAdd="AddDesiredFood" />
 
                 <!-- Aliments de saison -->
                 <SeasonalFoodsSection 

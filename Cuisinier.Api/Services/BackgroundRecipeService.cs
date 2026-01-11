@@ -79,6 +79,28 @@ public class BackgroundRecipeService
 
             recipe.DetailedRecipe = detailedRecipe;
             context.Entry(recipe).Property(r => r.DetailedRecipe).IsModified = true;
+            
+            // Update associated Dish if it exists
+            var dishIdToUpdate = recipe.DishId ?? recipe.OriginalDishId;
+            if (dishIdToUpdate.HasValue)
+            {
+                var dish = await context.Dishes
+                    .FirstOrDefaultAsync(d => d.Id == dishIdToUpdate.Value);
+                
+                if (dish != null)
+                {
+                    dish.DetailedRecipe = detailedRecipe;
+                    dish.UpdatedAt = DateTime.UtcNow;
+                    context.Entry(dish).Property(d => d.DetailedRecipe).IsModified = true;
+                    context.Entry(dish).Property(d => d.UpdatedAt).IsModified = true;
+                    
+                    _logger.LogInformation(
+                        "Updated DetailedRecipe for Dish {DishId} associated with Recipe {RecipeId}",
+                        dishIdToUpdate.Value,
+                        recipeId);
+                }
+            }
+            
             await context.SaveChangesAsync();
 
             // Reload recipe with all relationships for mapping

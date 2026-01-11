@@ -98,10 +98,32 @@
     border-color: rgba(232, 90, 79, 0.2) !important;
 }
 
+.type-plat-content {
+    padding: 0.5rem;
+}
+
+.type-plat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+
+.type-plat-row > :first-child {
+    flex: 1 1 200px;
+    min-width: 150px;
+}
+
+.type-plat-row > :nth-child(2) {
+    flex: 0 0 120px;
+    min-width: 100px;
+}
+
 .delete-type-button {
     opacity: 0.7;
     transition: opacity 0.2s ease;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .delete-type-button:hover {
@@ -115,6 +137,28 @@
 
     .type-plat-card {
         margin: 0;
+    }
+
+    .type-plat-content {
+        padding: 0.75rem;
+    }
+
+    .type-plat-row {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .type-plat-row > :first-child,
+    .type-plat-row > :nth-child(2) {
+        flex: 1 1 100%;
+        min-width: 100%;
+        width: 100% !important;
+    }
+
+    .delete-type-button {
+        align-self: flex-end;
+        margin-left: 0;
+        margin-top: -0.5rem;
     }
 }
 

@@ -459,7 +459,17 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             sb.AppendLine("Ces aliments peuvent apparaître dans une ou plusieurs recettes du menu.");
         }
         
-        sb.AppendLine($"\nAliments de saison: {(parameters.SeasonalFoods ? "Oui" : "Non")}");
+        if (parameters.SeasonalFoods)
+        {
+            var monthName = GetMonthName(parameters.WeekStartDate);
+            
+            sb.AppendLine($"\n=== ALIMENTS DE SAISON (CONTRAINTE STRICTE) ===");
+            sb.AppendLine($"Mois: {monthName} (basé sur la date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd})");
+            sb.AppendLine("\nIMPORTANT - CONTRAINTE OBLIGATOIRE:");
+            sb.AppendLine("Tu DOIS utiliser UNIQUEMENT des aliments de saison disponibles en France au mois de " + monthName + ".");
+            sb.AppendLine("Les aliments doivent être ceux qui sont naturellement récoltés et disponibles localement en France pendant ce mois.");
+            sb.AppendLine("\nCette contrainte est STRICTE et NON NÉGOCIABLE. Tous les ingrédients des recettes doivent respecter la saisonnalité du mois.");
+        }
         
         if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
         {
@@ -611,6 +621,18 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             sb.AppendLine($"Aliments à bannir: {string.Join(", ", parameters.BannedFoods)}");
         }
         
+        if (parameters.SeasonalFoods)
+        {
+            var monthName = GetMonthName(parameters.WeekStartDate);
+            
+            sb.AppendLine($"\n=== ALIMENTS DE SAISON (CONTRAINTE STRICTE) ===");
+            sb.AppendLine($"Mois: {monthName} (basé sur la date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd})");
+            sb.AppendLine("\nIMPORTANT - CONTRAINTE OBLIGATOIRE:");
+            sb.AppendLine("Tu DOIS utiliser UNIQUEMENT des aliments de saison disponibles en France au mois de " + monthName + ".");
+            sb.AppendLine("Les aliments doivent être ceux qui sont naturellement récoltés et disponibles localement en France pendant ce mois.");
+            sb.AppendLine("\nCette contrainte est STRICTE et NON NÉGOCIABLE. Tous les ingrédients de la recette doivent respecter la saisonnalité du mois.");
+        }
+        
         sb.AppendLine("\nIMPORTANT: Tu DOIS générer UNIQUEMENT UN SEUL plat (pas un tableau, pas plusieurs plats).");
         sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
         sb.AppendLine(@"{
@@ -668,6 +690,27 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         }
 
         return null;
+    }
+
+    private string GetMonthName(DateTime date)
+    {
+        var month = date.Month;
+        return month switch
+        {
+            1 => "janvier",
+            2 => "février",
+            3 => "mars",
+            4 => "avril",
+            5 => "mai",
+            6 => "juin",
+            7 => "juillet",
+            8 => "août",
+            9 => "septembre",
+            10 => "octobre",
+            11 => "novembre",
+            12 => "décembre",
+            _ => "janvier" // Fallback (should never happen)
+        };
     }
 
     // DTOs for deserialization
