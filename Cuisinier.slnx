@@ -5,4 +5,5 @@
   <Project Path="Cuisinier.Core/Cuisinier.Core.csproj" />
   <Project Path="Cuisinier.DbMigrator/Cuisinier.DbMigrator.csproj" />
   <Project Path="Cuisinier.Infrastructure/Cuisinier.Infrastructure.csproj" />
+  <Project Path="Cuisinier.Shared/Cuisinier.Shared.csproj" />
 </Solution>

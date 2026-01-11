@@ -1,4 +1,4 @@
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 using Cuisinier.App.Services;
 using MudBlazor;
 using Microsoft.AspNetCore.Components;

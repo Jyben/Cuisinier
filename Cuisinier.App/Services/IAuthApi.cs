@@ -1,4 +1,4 @@
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 using Refit;
 
 namespace Cuisinier.App.Services;

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Cuisinier.Core.Entities;
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 
 namespace Cuisinier.Infrastructure.Mappings;
 

@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Cuisinier.Infrastructure\Cuisinier.Infrastructure.csproj" />
     <ProjectReference Include="..\Cuisinier.Core\Cuisinier.Core.csproj" />
+    <ProjectReference Include="..\Cuisinier.Shared\Cuisinier.Shared.csproj" />
   </ItemGroup>
 
 </Project>

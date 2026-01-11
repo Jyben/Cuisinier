@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using Cuisinier.Core.DTOs;
+using Cuisinier.Shared.DTOs;
 using Cuisinier.Api.Services;
 using Cuisinier.Api.Helpers;
 
