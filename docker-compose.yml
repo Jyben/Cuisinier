@@ -85,7 +85,7 @@ services:
     command: >
       bash -c "
       dotnet restore Cuisinier.App/Cuisinier.App.csproj &&
-      dotnet publish Cuisinier.App/Cuisinier.App.csproj -c Release -o /tmp/publish -p:PublishTrimmed=false &&
+      dotnet publish Cuisinier.App/Cuisinier.App.csproj -c Release -o /tmp/publish &&
       rm -rf /out/* &&
       cp -r /tmp/publish/wwwroot/* /out
       "
