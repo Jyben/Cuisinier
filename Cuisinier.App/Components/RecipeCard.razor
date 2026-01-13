@@ -177,6 +177,7 @@
     [Parameter] public EventCallback<int> OnDelete { get; set; }
     [Parameter] public EventCallback<int> OnReplace { get; set; }
     [Parameter] public EventCallback<int> OnToggleCooked { get; set; }
+    [Parameter] public bool? IsFavorite { get; set; }
 
     private bool _isFavorite = false;
     private bool _isLoadingFavorite = false;
@@ -191,7 +192,16 @@
         // Only check if favorite button is shown (not during menu generation)
         if (ShowFavoriteButton)
         {
-            await CheckIfFavorite();
+            if (IsFavorite.HasValue)
+            {
+                // Use the provided value from batch check
+                _isFavorite = IsFavorite.Value;
+            }
+            else
+            {
+                // Fallback to individual check if not provided
+                await CheckIfFavorite();
+            }
         }
     }
 
@@ -200,7 +210,16 @@
         // Only check if favorite button is shown (not during menu generation)
         if (ShowFavoriteButton)
         {
-            await CheckIfFavorite();
+            if (IsFavorite.HasValue)
+            {
+                // Use the provided value from batch check
+                _isFavorite = IsFavorite.Value;
+            }
+            else
+            {
+                // Fallback to individual check if not provided
+                await CheckIfFavorite();
+            }
         }
     }
 

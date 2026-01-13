@@ -22,6 +22,9 @@ public interface IFavoriteApi
 
     [Post("/api/favorite/check-duplicate")]
     Task<bool> CheckDuplicateAsync(CheckDuplicateRequest request);
+
+    [Post("/api/favorite/check-duplicates-batch")]
+    Task<CheckDuplicatesBatchResponse> CheckDuplicatesBatchAsync(CheckDuplicatesBatchRequest request);
 }
 
 public class CheckDuplicateRequest

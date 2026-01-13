@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @inject IMenuApi MenuApi
 @inject IShoppingListApi ShoppingListApi
+@inject IFavoriteApi FavoriteApi
 @inject NavigationManager Navigation
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
@@ -34,6 +35,7 @@
                     ShowDetails="true"
                     ShowActions="@_menuValid"
                     ShowFavoriteButton="@_menuValid"
+                    IsFavorite="@(_favoriteStatus.GetValueOrDefault(recipe.Id, false))"
                     OnDelete="DeleteRecipe"
                     OnToggleCooked="ToggleRecipeCooked"
                     MenuValid="@_menuValid"
@@ -61,6 +63,7 @@
     private bool _menuValid = false;
     private HubConnection? _hubConnection;
     private Dictionary<int, bool> _recipesBeingGenerated = new();
+    private Dictionary<int, bool> _favoriteStatus = new();
     private int? _lastConnectedMenuId = null;
 
     protected override async Task OnInitializedAsync()
@@ -178,6 +181,7 @@
             
             // Reset and rebuild the dictionary based on current recipe state
             _recipesBeingGenerated.Clear();
+            _favoriteStatus.Clear();
             
             // Mark recipes without DetailedRecipe as being generated
             if (_menu != null && _menuValid)
@@ -186,6 +190,9 @@
                 {
                     _recipesBeingGenerated[recipe.Id] = true;
                 }
+
+                // Check favorites in batch for all recipes
+                await CheckFavoritesBatch();
             }
         }
         catch
@@ -195,6 +202,44 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private async Task CheckFavoritesBatch()
+    {
+        if (_menu == null || !_menuValid || !_menu.Recipes.Any())
+            return;
+
+        try
+        {
+            var request = new CheckDuplicatesBatchRequest
+            {
+                Recipes = _menu.Recipes.Select(r => new RecipeCheckItem
+                {
+                    RecipeId = r.Id,
+                    Title = r.Title,
+                    Ingredients = r.Ingredients.Select(i => new IngredientRequest
+                    {
+                        Name = i.Name,
+                        Quantity = i.Quantity,
+                        Category = i.Category
+                    }).ToList()
+                }).ToList()
+            };
+
+            var response = await FavoriteApi.CheckDuplicatesBatchAsync(request);
+            
+            // Build dictionary of favorite status for all recipes
+            // Initialize all recipes to false first, then set to true if they match
+            foreach (var recipe in _menu.Recipes)
+            {
+                _favoriteStatus[recipe.Id] = response.Matches.Any(m => m.RecipeId == recipe.Id);
+            }
+        }
+        catch
+        {
+            // Log error but don't block the UI - RecipeCard will fallback to individual checks
+            // In production, you might want to log this
         }
     }
 
@@ -250,6 +295,8 @@
         if (result != null && !result.Canceled)
         {
             await LoadMenu();
+            // Recheck favorites after adding a new favorite
+            await CheckFavoritesBatch();
         }
     }
 
