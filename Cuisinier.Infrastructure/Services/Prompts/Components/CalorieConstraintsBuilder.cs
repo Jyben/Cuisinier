@@ -26,40 +26,40 @@ public class CalorieConstraintsBuilder : IConstraintBuilder
         }
         else
         {
-            sb.AppendLine("\nCalories par plat:");
+            sb.AppendLine("\nCalories par personne:");
         }
 
         if (_minKcal.HasValue && _maxKcal.HasValue)
         {
             if (_includeInConstraints)
             {
-                sb.AppendLine($"- Chaque recette DOIT avoir entre {_minKcal.Value} et {_maxKcal.Value} kcal. C'est une contrainte stricte.");
+                sb.AppendLine($"- Chaque recette DOIT avoir entre {_minKcal.Value} et {_maxKcal.Value} kcal PAR PERSONNE. C'est une contrainte stricte.");
             }
             else
             {
-                sb.AppendLine($"entre {_minKcal.Value} et {_maxKcal.Value} kcal");
+                sb.AppendLine($"entre {_minKcal.Value} et {_maxKcal.Value} kcal par personne");
             }
         }
         else if (_minKcal.HasValue)
         {
             if (_includeInConstraints)
             {
-                sb.AppendLine($"- Chaque recette DOIT avoir au minimum {_minKcal.Value} kcal. C'est une contrainte stricte.");
+                sb.AppendLine($"- Chaque recette DOIT avoir au minimum {_minKcal.Value} kcal PAR PERSONNE. C'est une contrainte stricte.");
             }
             else
             {
-                sb.AppendLine($"Calories minimales par plat: {_minKcal.Value} kcal");
+                sb.AppendLine($"Calories minimales par personne: {_minKcal.Value} kcal");
             }
         }
         else if (_maxKcal.HasValue)
         {
             if (_includeInConstraints)
             {
-                sb.AppendLine($"- Chaque recette DOIT avoir au maximum {_maxKcal.Value} kcal. C'est une contrainte stricte.");
+                sb.AppendLine($"- Chaque recette DOIT avoir au maximum {_maxKcal.Value} kcal PAR PERSONNE. C'est une contrainte stricte.");
             }
             else
             {
-                sb.AppendLine($"Calories maximales par plat: {_maxKcal.Value} kcal");
+                sb.AppendLine($"Calories maximales par personne: {_maxKcal.Value} kcal");
             }
         }
 

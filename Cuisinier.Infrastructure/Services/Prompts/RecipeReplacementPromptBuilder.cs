@@ -160,13 +160,15 @@ public class RecipeReplacementPromptBuilder : IPromptBuilder
     {
         sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
         sb.AppendLine(JsonStructure);
+        sb.AppendLine("\nIMPORTANT: Le champ \"kcal\" représente les calories PAR PERSONNE, pas pour le plat total. Si \"personnes\": 4 et \"kcal\": 450, cela signifie 450 kcal par personne (soit 1800 kcal pour le plat total de 4 personnes).");
     }
 
     private void AppendMandatoryConstraints(System.Text.StringBuilder sb)
     {
         sb.AppendLine("\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
         sb.AppendLine("- Tu DOIS générer UNIQUEMENT UN SEUL plat (un objet JSON unique, pas un tableau).");
-        sb.AppendLine("- Tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
+        sb.AppendLine("- Les quantités d'ingrédients DOIVENT être proportionnelles au nombre de personnes. Si tu génères un plat pour 1 personne, divise toutes les quantités par 4 par rapport à un plat pour 4 personnes.");
+        sb.AppendLine("- Pour chaque recette, tu DOIS fournir le nombre de calories PAR PERSONNE (\"kcal\") dans le JSON. Calcule les calories de manière réaliste en fonction des ingrédients et de leurs quantités pour une seule personne. Un plat riche en viande, fromage ou crème doit avoir plus de calories qu'un plat principalement végétal.");
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
         sb.AppendLine("- Tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important.");
     }
