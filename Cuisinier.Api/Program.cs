@@ -89,10 +89,22 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// Register services
+// Configure OpenAI Service Options
+builder.Services.Configure<Cuisinier.Infrastructure.Services.Options.OpenAIServiceOptions>(
+    builder.Configuration.GetSection(Cuisinier.Infrastructure.Services.Options.OpenAIServiceOptions.SectionName));
+
+// Register OpenAI Service dependencies
+builder.Services.AddSingleton<Cuisinier.Infrastructure.Services.Helpers.TimeSpanParser>();
+builder.Services.AddSingleton<Cuisinier.Infrastructure.Services.Mappers.OpenAIResponseMapper>();
+
+// Register OpenAI Service
 var openAIApiKey = builder.Configuration["OpenAI:ApiKey"] ?? throw new InvalidOperationException("OpenAI:ApiKey not configured");
 builder.Services.AddSingleton<IOpenAIService>(sp => 
-    new OpenAIService(openAIApiKey, sp.GetRequiredService<ILogger<OpenAIService>>()));
+    new OpenAIService(
+        openAIApiKey, 
+        sp.GetRequiredService<ILogger<OpenAIService>>(),
+        sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Cuisinier.Infrastructure.Services.Options.OpenAIServiceOptions>>(),
+        sp.GetRequiredService<Cuisinier.Infrastructure.Services.Mappers.OpenAIResponseMapper>()));
 
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, EmailService>();

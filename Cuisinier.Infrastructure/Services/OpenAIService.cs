@@ -1,10 +1,13 @@
-using System.Linq;
-using System.Reflection;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Cuisinier.Shared.DTOs;
+using Cuisinier.Infrastructure.Services.Options;
+using Cuisinier.Infrastructure.Services.Prompts;
+using Cuisinier.Infrastructure.Services.Mappers;
+using Cuisinier.Infrastructure.Services.Helpers;
+using Cuisinier.Infrastructure.Services.DTOs;
 using OpenAI.Chat;
 
 namespace Cuisinier.Infrastructure.Services;
@@ -14,11 +17,19 @@ public class OpenAIService : IOpenAIService
     private readonly ChatClient _chatClient;
     private readonly ILogger<OpenAIService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly OpenAIServiceOptions _options;
+    private readonly OpenAIResponseMapper _mapper;
 
-    public OpenAIService(string apiKey, ILogger<OpenAIService> logger)
+    public OpenAIService(
+        string apiKey,
+        ILogger<OpenAIService> logger,
+        IOptions<OpenAIServiceOptions> options,
+        OpenAIResponseMapper mapper)
     {
-        _chatClient = new ChatClient(model: "gpt-4o-mini", apiKey: apiKey);
+        _options = options.Value;
+        _chatClient = new ChatClient(model: _options.Model, apiKey: apiKey);
         _logger = logger;
+        _mapper = mapper;
         
         _jsonOptions = new JsonSerializerOptions
         {
@@ -40,10 +51,10 @@ public class OpenAIService : IOpenAIService
                 throw new InvalidOperationException("No dishes requested");
             }
 
-            const int maxDishesPerBatch = 8;
+            var maxDishesPerBatch = _options.MaxDishesPerBatch;
             var allRecipes = new List<RecipeResponse>();
 
-            // Si le nombre total est <= 8, on fait un seul appel
+            // Si le nombre total est <= maxDishesPerBatch, on fait un seul appel
             if (totalDishes <= maxDishesPerBatch)
             {
                 var menuResponse = await GenerateMenuBatchAsync(parameters, parameters.NumberOfDishes, new List<string>());
@@ -149,7 +160,20 @@ public class OpenAIService : IOpenAIService
         List<NumberOfDishesDto> dishesToGenerate, 
         List<string> generatedTitles)
     {
-        var prompt = BuildMenuPrompt(parameters, dishesToGenerate, generatedTitles);
+        var promptBuilder = new MenuPromptBuilder()
+            .WithWeekStartDate(parameters.WeekStartDate)
+            .WithDishCounts(dishesToGenerate)
+            .WithAlreadyGeneratedTitles(generatedTitles)
+            .WithDishTypes(parameters.DishTypes)
+            .WithBannedFoods(parameters.BannedFoods)
+            .WithDesiredFoods(parameters.DesiredFoods)
+            .WithSeasonalFoods(parameters.SeasonalFoods, parameters.WeekStartDate)
+            .WithCalorieConstraints(parameters.MinKcalPerDish, parameters.MaxKcalPerDish)
+            .WithDietaryConstraints(parameters.WeightedOptions)
+            .WithMaxPreparationTime(parameters.MaxPreparationTime)
+            .WithMaxCookingTime(parameters.MaxCookingTime);
+        
+        var prompt = promptBuilder.Build();
         
         var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
         
@@ -164,7 +188,7 @@ public class OpenAIService : IOpenAIService
 
         var options = new ChatCompletionOptions
         {
-            Temperature = 0.7f
+            Temperature = _options.Temperatures.Menu
         };
 
         var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
@@ -180,59 +204,15 @@ public class OpenAIService : IOpenAIService
         var menuData = JsonSerializer.Deserialize<MenuResponseDto>(jsonResponse, _jsonOptions)
             ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
 
-        var menuResponse = new MenuResponse
-        {
-            WeekStartDate = parameters.WeekStartDate,
-            CreationDate = DateTime.UtcNow,
-            Recipes = menuData.Recettes.Select(r => new RecipeResponse
-            {
-                Title = r.Titre,
-                Description = r.Description,
-                PreparationTime = ParseTimeSpan(r.TempsPreparation),
-                CookingTime = ParseTimeSpan(r.TempsCuisson),
-                Kcal = r.Kcal,
-                Servings = r.Personnes,
-                Ingredients = r.Ingredients.Select(i => new IngredientResponse
-                {
-                    Name = i.Nom,
-                    Quantity = i.Quantite ?? "",
-                    Category = i.Categorie ?? ""
-                }).ToList()
-            }).ToList()
-        };
-
-        return menuResponse;
+        return _mapper.MapToMenuResponse(menuData, parameters.WeekStartDate);
     }
 
     public async Task<string> GenerateDetailedRecipeAsync(string recipeTitle, List<IngredientResponse> ingredients, string shortDescription)
     {
         try
         {
-            var ingredientsList = string.Join("\n", ingredients.Select(i => $"- {i.Name}: {i.Quantity}"));
-            
-            var prompt = $@"Génère une recette complète et détaillée pour le plat suivant :
-
-Titre : {recipeTitle}
-Description : {shortDescription}
-
-Ingrédients disponibles (liste COMPLÈTE et OBLIGATOIRE à utiliser) :
-{ingredientsList}
-
-Génère une recette détaillée avec :
-1. Une introduction (2-3 phrases)
-2. Les étapes de préparation numérotées et détaillées
-3. Des conseils de cuisson si nécessaire
-4. Des suggestions de présentation
-
-IMPORTANT - CONTRAINTES OBLIGATOIRES : 
-- N'inclus PAS le titre du plat car il est déjà affiché ailleurs.
-- N'inclus PAS la liste des ingrédients car elle est déjà affichée ailleurs.
-- Commence directement par l'introduction sans répéter le titre.
-- Tu DOIS utiliser UNIQUEMENT les ingrédients listés ci-dessus. N'ajoute AUCUN ingrédient qui ne figure pas dans cette liste.
-- La recette doit être cohérente avec les ingrédients fournis. Si un ingrédient est mentionné dans la liste, il DOIT être utilisé dans les étapes de préparation.
-
-Rédige la recette de manière claire, pédagogique et appétissante. Utilise un ton chaleureux et convivial. 
-Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (-) et des listes numérotées (1., 2., etc.).";
+            var promptBuilder = new RecipePromptBuilder(recipeTitle, ingredients, shortDescription);
+            var prompt = promptBuilder.Build();
 
             var systemMessage = "Tu es un chef cuisinier expert qui rédige des recettes détaillées et appétissantes en français.";
             
@@ -247,7 +227,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
 
             var options = new ChatCompletionOptions
             {
-                Temperature = 0.8f
+                Temperature = _options.Temperatures.DetailedRecipe
             };
 
             var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
@@ -267,7 +247,16 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
     {
         try
         {
-            var prompt = BuildReplacementPrompt(parameters, recipeToReplace);
+            var promptBuilder = new RecipeReplacementPromptBuilder()
+                .WithRecipeToReplace(recipeToReplace.Title, recipeToReplace.Description)
+                .WithWeekStartDate(parameters.WeekStartDate)
+                .WithSeasonalFoods(parameters.SeasonalFoods, parameters.WeekStartDate)
+                .WithCalorieConstraints(parameters.MinKcalPerDish, parameters.MaxKcalPerDish)
+                .WithBannedFoods(parameters.BannedFoods)
+                .WithMaxPreparationTime(parameters.MaxPreparationTime)
+                .WithMaxCookingTime(parameters.MaxCookingTime);
+            
+            var prompt = promptBuilder.Build();
 
             var systemMessage = "Tu es un expert en cuisine française qui génère des recettes. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
             
@@ -282,7 +271,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
 
             var options = new ChatCompletionOptions
             {
-                Temperature = 0.8f
+                Temperature = _options.Temperatures.RecipeReplacement
             };
 
             var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
@@ -294,23 +283,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             var recipeData = JsonSerializer.Deserialize<RecipeResponseDto>(jsonResponse, _jsonOptions)
                 ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
 
-            var newRecipe = new RecipeResponse
-            {
-                Title = recipeData.Titre,
-                Description = recipeData.Description,
-                PreparationTime = ParseTimeSpan(recipeData.TempsPreparation),
-                CookingTime = ParseTimeSpan(recipeData.TempsCuisson),
-                Kcal = recipeData.Kcal,
-                Servings = recipeData.Personnes,
-                Ingredients = recipeData.Ingredients.Select(i => new IngredientResponse
-                {
-                    Name = i.Nom,
-                    Quantity = i.Quantite ?? "",
-                    Category = i.Categorie ?? ""
-                }).ToList()
-            };
-
-            return newRecipe;
+            return _mapper.MapToRecipeResponse(recipeData);
         }
         catch (Exception ex)
         {
@@ -323,31 +296,9 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
     {
         try
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("Génère une liste de courses organisée par catégories à partir des recettes suivantes :\n");
-
-            foreach (var recipe in recipes)
-            {
-                sb.AppendLine($"\n{recipe.Title} ({recipe.Servings} personnes):");
-                foreach (var ingredient in recipe.Ingredients)
-                {
-                    sb.AppendLine($"- {ingredient.Name}: {ingredient.Quantity}");
-                }
-            }
-
-            sb.AppendLine("\n\nGénère une liste de courses organisée par catégories (Légumes, Fruits, Viandes, Poissons, Produits laitiers, Épicerie, etc.) en regroupant les ingrédients similaires et en additionnant les quantités quand c'est pertinent.");
-            sb.AppendLine("\nRéponds en JSON avec cette structure :");
-            sb.AppendLine(@"{
-  ""items"": [
-    {
-      ""nom"": ""Nom de l'ingrédient"",
-      ""quantite"": ""Quantité totale"",
-      ""categorie"": ""Catégorie""
-    }
-  ]
-}");
-
-            var prompt = sb.ToString();
+            var promptBuilder = new ShoppingListPromptBuilder(recipes);
+            var prompt = promptBuilder.Build();
+            
             var systemMessage = "Tu es un assistant qui organise des listes de courses. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
             
             _logger.LogInformation("Shopping list generation - System prompt: {SystemMessage}", systemMessage);
@@ -361,7 +312,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
 
             var options = new ChatCompletionOptions
             {
-                Temperature = 0.3f
+                Temperature = _options.Temperatures.ShoppingList
             };
 
             var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
@@ -373,19 +324,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
             var listData = JsonSerializer.Deserialize<ShoppingListResponseDto>(jsonResponse, _jsonOptions)
                 ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
 
-            var shoppingList = new ShoppingListResponse
-            {
-                CreationDate = DateTime.UtcNow,
-                Items = listData.Items.Select(i => new ShoppingListItemResponse
-                {
-                    Name = i.Nom,
-                    Quantity = i.Quantite ?? "",
-                    Category = i.Categorie ?? "",
-                    IsManuallyAdded = false
-                }).ToList()
-            };
-
-            return shoppingList;
+            return _mapper.MapToShoppingListResponse(listData);
         }
         catch (Exception ex)
         {
@@ -394,272 +333,7 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         }
     }
 
-    private string BuildMenuPrompt(MenuParameters parameters, List<NumberOfDishesDto> dishesToGenerate, List<string> alreadyGeneratedTitles)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Génère un menu de la semaine avec les paramètres suivants:");
-        sb.AppendLine($"Date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd}");
-        
-        var totalDishes = dishesToGenerate.Sum(d => d.NumberOfDishes);
-        
-        // Si c'est un batch, indiquer le nombre de plats pour ce batch
-        if (totalDishes > 0)
-        {
-            sb.AppendLine($"\nIMPORTANT: Tu DOIS générer EXACTEMENT {totalDishes} plat(s) dans ce batch.");
-        }
-        
-        // Si des plats ont déjà été générés, les lister pour éviter les doublons
-        if (alreadyGeneratedTitles.Any())
-        {
-            sb.AppendLine("\nPlats DÉJÀ générés (tu NE DOIS PAS les répéter, génère des plats DIFFÉRENTS):");
-            foreach (var title in alreadyGeneratedTitles)
-            {
-                sb.AppendLine($"- {title}");
-            }
-            sb.AppendLine("\nIMPORTANT: Génère des plats COMPLÈTEMENT DIFFÉRENTS de ceux listés ci-dessus. Ne répète aucun titre, aucune variante similaire.");
-        }
-        
-        if (dishesToGenerate.Any())
-        {
-            sb.AppendLine("\nNombre de plats:");
-            foreach (var item in dishesToGenerate)
-            {
-                sb.AppendLine($"- {item.NumberOfDishes} plats pour {item.Servings} personne(s)");
-            }
-        }
-        
-        if (parameters.DishTypes.Any())
-        {
-            sb.AppendLine("\nTypes de plats souhaités:");
-            foreach (var (type, number) in parameters.DishTypes)
-            {
-                if (number.HasValue)
-                {
-                    sb.AppendLine($"- {type}: {number.Value} fois");
-                }
-                else
-                {
-                    sb.AppendLine($"- {type} (optionnel, peut être inclus dans le menu)");
-                }
-            }
-        }
-        
-        if (parameters.BannedFoods.Any())
-        {
-            sb.AppendLine($"\nAliments à bannir: {string.Join(", ", parameters.BannedFoods)}");
-        }
-        
-        if (parameters.DesiredFoods.Any())
-        {
-            sb.AppendLine("\nAliments souhaités:");
-            foreach (var item in parameters.DesiredFoods)
-            {
-                sb.AppendLine($"- {item.Food}");
-            }
-            sb.AppendLine("Ces aliments peuvent apparaître dans une ou plusieurs recettes du menu.");
-        }
-        
-        if (parameters.SeasonalFoods)
-        {
-            var monthName = GetMonthName(parameters.WeekStartDate);
-            
-            sb.AppendLine($"\n=== ALIMENTS DE SAISON (CONTRAINTE STRICTE) ===");
-            sb.AppendLine($"Mois: {monthName} (basé sur la date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd})");
-            sb.AppendLine("\nIMPORTANT - CONTRAINTE OBLIGATOIRE:");
-            sb.AppendLine("Tu DOIS utiliser UNIQUEMENT des aliments de saison disponibles en France au mois de " + monthName + ".");
-            sb.AppendLine("Les aliments doivent être ceux qui sont naturellement récoltés et disponibles localement en France pendant ce mois.");
-            sb.AppendLine("\nCette contrainte est STRICTE et NON NÉGOCIABLE. Tous les ingrédients des recettes doivent respecter la saisonnalité du mois.");
-        }
-        
-        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
-        {
-            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"\nCalories par plat: entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal");
-            }
-            else if (parameters.MinKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"\nCalories minimales par plat: {parameters.MinKcalPerDish.Value} kcal");
-            }
-            else if (parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"\nCalories maximales par plat: {parameters.MaxKcalPerDish.Value} kcal");
-            }
-        }
-        
-        if (parameters.WeightedOptions.Any(kvp => kvp.Value.HasValue))
-        {
-            // Separate options with intensity and boolean options
-            var optionsWithIntensity = new[] { "Équilibré", "Gourmand" };
-            var booleanOptions = new[] { "Végan", "Végétarien", "Sans gluten", "Sans lactose" };
-            
-            var intensityOptions = parameters.WeightedOptions
-                .Where(kvp => kvp.Value.HasValue && optionsWithIntensity.Contains(kvp.Key))
-                .ToList();
-            var boolOptions = parameters.WeightedOptions
-                .Where(kvp => kvp.Value.HasValue && kvp.Value.Value > 0 && booleanOptions.Contains(kvp.Key))
-                .ToList();
-            
-            if (intensityOptions.Any())
-            {
-                sb.AppendLine("\nOptions avec intensité:");
-                foreach (var (option, value) in intensityOptions)
-                {
-                    if (value == 0)
-                    {
-                        sb.AppendLine($"- {option}: aucun (0%)");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"- {option}: {value}%");
-                    }
-                }
-            }
-            
-            if (boolOptions.Any())
-            {
-                sb.AppendLine("\nContraintes alimentaires (obligatoires pour tous les plats):");
-                foreach (var (option, _) in boolOptions)
-                {
-                    sb.AppendLine($"- {option}");
-                }
-            }
-        }
-        
-        if (parameters.MaxPreparationTime.HasValue)
-        {
-            sb.AppendLine($"\nTemps de préparation maximum: {parameters.MaxPreparationTime.Value.TotalMinutes} minutes");
-        }
-        
-        if (parameters.MaxCookingTime.HasValue)
-        {
-            sb.AppendLine($"Temps de cuisson maximum: {parameters.MaxCookingTime.Value.TotalMinutes} minutes");
-        }
-        
-        sb.AppendLine("\nGénère une réponse JSON avec cette structure:");
-        sb.AppendLine(@"{
-  ""recettes"": [
-    {
-      ""titre"": ""Titre du plat"",
-      ""description"": ""Description courte"",
-      ""tempsPreparation"": ""00:30:00"",
-      ""tempsCuisson"": ""01:00:00"",
-      ""kcal"": 450,
-      ""personnes"": 4,
-      ""ingredients"": [
-        {
-          ""nom"": ""Nom de l'ingrédient"",
-          ""quantite"": ""200g"",
-          ""categorie"": ""Légumes""
-        }
-      ]
-    }
-  ]
-}");
-        sb.AppendLine($"\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
-        if (totalDishes > 0)
-        {
-            sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
-        }
-        sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
-        sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
-        sb.AppendLine("- Pour chaque recette, tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
-        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
-        {
-            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"- Chaque recette DOIT avoir entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal. C'est une contrainte stricte.");
-            }
-            else if (parameters.MinKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"- Chaque recette DOIT avoir au minimum {parameters.MinKcalPerDish.Value} kcal. C'est une contrainte stricte.");
-            }
-            else if (parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"- Chaque recette DOIT avoir au maximum {parameters.MaxKcalPerDish.Value} kcal. C'est une contrainte stricte.");
-            }
-        }
-        
-        return sb.ToString();
-    }
-
-    private string BuildReplacementPrompt(MenuParameters parameters, RecipeResponse recipeToReplace)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"Génère une nouvelle recette pour remplacer: {recipeToReplace.Title}");
-        sb.AppendLine($"Description actuelle: {recipeToReplace.Description}");
-        
-        // Reuse constraints from original menu
-        if (parameters.MaxPreparationTime.HasValue)
-        {
-            sb.AppendLine($"Temps de préparation maximum: {parameters.MaxPreparationTime.Value.TotalMinutes} minutes");
-        }
-        
-        if (parameters.MaxCookingTime.HasValue)
-        {
-            sb.AppendLine($"Temps de cuisson maximum: {parameters.MaxCookingTime.Value.TotalMinutes} minutes");
-        }
-        
-        if (parameters.MinKcalPerDish.HasValue || parameters.MaxKcalPerDish.HasValue)
-        {
-            if (parameters.MinKcalPerDish.HasValue && parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"Calories par plat: entre {parameters.MinKcalPerDish.Value} et {parameters.MaxKcalPerDish.Value} kcal");
-            }
-            else if (parameters.MinKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"Calories minimales par plat: {parameters.MinKcalPerDish.Value} kcal");
-            }
-            else if (parameters.MaxKcalPerDish.HasValue)
-            {
-                sb.AppendLine($"Calories maximales par plat: {parameters.MaxKcalPerDish.Value} kcal");
-            }
-        }
-        
-        if (parameters.BannedFoods.Any())
-        {
-            sb.AppendLine($"Aliments à bannir: {string.Join(", ", parameters.BannedFoods)}");
-        }
-        
-        if (parameters.SeasonalFoods)
-        {
-            var monthName = GetMonthName(parameters.WeekStartDate);
-            
-            sb.AppendLine($"\n=== ALIMENTS DE SAISON (CONTRAINTE STRICTE) ===");
-            sb.AppendLine($"Mois: {monthName} (basé sur la date de début de semaine: {parameters.WeekStartDate:yyyy-MM-dd})");
-            sb.AppendLine("\nIMPORTANT - CONTRAINTE OBLIGATOIRE:");
-            sb.AppendLine("Tu DOIS utiliser UNIQUEMENT des aliments de saison disponibles en France au mois de " + monthName + ".");
-            sb.AppendLine("Les aliments doivent être ceux qui sont naturellement récoltés et disponibles localement en France pendant ce mois.");
-            sb.AppendLine("\nCette contrainte est STRICTE et NON NÉGOCIABLE. Tous les ingrédients de la recette doivent respecter la saisonnalité du mois.");
-        }
-        
-        sb.AppendLine("\nIMPORTANT: Tu DOIS générer UNIQUEMENT UN SEUL plat (pas un tableau, pas plusieurs plats).");
-        sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
-        sb.AppendLine(@"{
-  ""titre"": ""Titre du plat"",
-  ""description"": ""Description courte"",
-  ""tempsPreparation"": ""00:30:00"",
-  ""tempsCuisson"": ""01:00:00"",
-  ""kcal"": 450,
-  ""personnes"": 4,
-  ""ingredients"": [
-    {
-      ""nom"": ""Nom de l'ingrédient"",
-      ""quantite"": ""200g"",
-      ""categorie"": ""Légumes""
-    }
-  ]
-}");
-        sb.AppendLine("\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
-        sb.AppendLine("- Tu DOIS générer UNIQUEMENT UN SEUL plat (un objet JSON unique, pas un tableau).");
-        sb.AppendLine("- Tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
-        sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
-        sb.AppendLine("- Tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important.");
-        
-        return sb.ToString();
-    }
-
-    private string CleanJsonResponse(string jsonResponse)
+    private static string CleanJsonResponse(string jsonResponse)
     {
         // Remove markdown code blocks if present
         jsonResponse = Regex.Replace(jsonResponse, @"^```json\s*", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
@@ -670,83 +344,5 @@ Formate la réponse en Markdown avec des titres (##, ###), des listes à puces (
         jsonResponse = jsonResponse.Trim();
         
         return jsonResponse;
-    }
-
-    private TimeSpan? ParseTimeSpan(string? timeSpanString)
-    {
-        if (string.IsNullOrWhiteSpace(timeSpanString))
-            return null;
-
-        // Expected format: "HH:mm:ss" or "HH:mm"
-        if (TimeSpan.TryParse(timeSpanString, out var result))
-            return result;
-
-        // Try to manually parse "HH:mm:ss" format
-        var parts = timeSpanString.Split(':');
-        if (parts.Length >= 2 && int.TryParse(parts[0], out var hours) && int.TryParse(parts[1], out var minutes))
-        {
-            var seconds = parts.Length > 2 && int.TryParse(parts[2], out var s) ? s : 0;
-            return new TimeSpan(hours, minutes, seconds);
-        }
-
-        return null;
-    }
-
-    private string GetMonthName(DateTime date)
-    {
-        var month = date.Month;
-        return month switch
-        {
-            1 => "janvier",
-            2 => "février",
-            3 => "mars",
-            4 => "avril",
-            5 => "mai",
-            6 => "juin",
-            7 => "juillet",
-            8 => "août",
-            9 => "septembre",
-            10 => "octobre",
-            11 => "novembre",
-            12 => "décembre",
-            _ => "janvier" // Fallback (should never happen)
-        };
-    }
-
-    // DTOs for deserialization
-    // Note: Property names must remain in French to match JSON keys from OpenAI responses
-    private class MenuResponseDto
-    {
-        public List<RecipeResponseDto> Recettes { get; set; } = new();
-    }
-
-    private class RecipeResponseDto
-    {
-        public string Titre { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string? TempsPreparation { get; set; }
-        public string? TempsCuisson { get; set; }
-        public int? Kcal { get; set; }
-        public int Personnes { get; set; }
-        public List<IngredientResponseDto> Ingredients { get; set; } = new();
-    }
-
-    private class IngredientResponseDto
-    {
-        public string Nom { get; set; } = string.Empty;
-        public string? Quantite { get; set; }
-        public string? Categorie { get; set; }
-    }
-
-    private class ShoppingListResponseDto
-    {
-        public List<ShoppingListItemResponseDto> Items { get; set; } = new();
-    }
-
-    private class ShoppingListItemResponseDto
-    {
-        public string Nom { get; set; } = string.Empty;
-        public string? Quantite { get; set; }
-        public string? Categorie { get; set; }
     }
 }
