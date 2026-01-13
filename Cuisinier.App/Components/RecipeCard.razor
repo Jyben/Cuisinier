@@ -8,7 +8,7 @@
 @inject ISnackbar Snackbar
 @inject ILogger<RecipeCard> Logger
 
-<MudCard Elevation="2" Class="recette-card">
+<MudCard Elevation="2" Class="@GetCardClass()">
     @if (IsReplacing)
     {
         <div class="replacing-overlay">
@@ -180,6 +180,11 @@
 
     private bool _isFavorite = false;
     private bool _isLoadingFavorite = false;
+
+    private string GetCardClass()
+    {
+        return Recipe.IsCooked ? "recette-card cooked" : "recette-card";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -432,6 +437,41 @@
     .recette-card .mud-expansion-panels .mud-expansion-panel:last-child .mud-expansion-panel-header > * {
         border-bottom-left-radius: var(--mud-default-borderradius, 4px) !important;
         border-bottom-right-radius: var(--mud-default-borderradius, 4px) !important;
+    }
+
+    /* Style pour les cartes cuisinées - visuellement désactivées */
+    .recette-card.cooked {
+        opacity: 0.6;
+        filter: grayscale(0.3);
+        position: relative;
+    }
+
+    .recette-card.cooked::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(76, 175, 80, 0.05) 0%, rgba(76, 175, 80, 0.1) 100%);
+        pointer-events: none;
+        z-index: 1;
+        border-radius: var(--mud-default-borderradius);
+    }
+
+    /* S'assurer que les boutons restent interactifs et à leur place */
+    .recette-card.cooked .header-buttons {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 10;
+    }
+
+    .recette-card.cooked .mud-card-actions,
+    .recette-card.cooked .mud-button,
+    .recette-card.cooked .mud-icon-button {
+        position: relative;
+        z-index: 2;
     }
 </style>
 

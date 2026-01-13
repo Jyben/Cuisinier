@@ -28,7 +28,8 @@ public static class EntityMappings
             CreationDate = menu.CreationDate,
             GenerationParameters = parameters,
             Recipes = menu.Recipes
-                .OrderBy(r => r.Servings)
+                .OrderBy(r => r.IsCooked) // Non-cuisinées (false) avant cuisinées (true)
+                .ThenBy(r => r.Servings) // Puis tri par nombre de personnes
                 .Select(r => r.ToResponse())
                 .ToList()
         };
