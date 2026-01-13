@@ -164,11 +164,12 @@ public class MenuPromptBuilder : IPromptBuilder
         if (_dishesToGenerate == null || !_dishesToGenerate.Any())
             return;
 
-        sb.AppendLine("\nNombre de plats:");
+        sb.AppendLine("\nNombre de plats à générer:");
         foreach (var item in _dishesToGenerate)
         {
-            sb.AppendLine($"- {item.NumberOfDishes} plats pour {item.Servings} personne(s)");
+            sb.AppendLine($"- {item.NumberOfDishes} plat(s), CHACUN pour {item.Servings} personne(s)");
         }
+        sb.AppendLine("\nIMPORTANT: Chaque plat généré doit avoir le nombre de personnes (\"personnes\") correspondant à celui spécifié ci-dessus. Si tu génères 4 plats pour 1 personne, alors CHAQUE plat doit avoir \"personnes\": 1 dans le JSON.");
     }
 
     private void AppendDishTypes(System.Text.StringBuilder sb)
@@ -278,6 +279,31 @@ public class MenuPromptBuilder : IPromptBuilder
         {
             sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
         }
+        
+        // Add constraint about servings per dish
+        if (_dishesToGenerate != null && _dishesToGenerate.Any())
+        {
+            // Group by servings to make it clearer
+            var servingsGroups = _dishesToGenerate
+                .GroupBy(d => d.Servings)
+                .Select(g => new { Servings = g.Key, Count = g.Sum(d => d.NumberOfDishes) })
+                .ToList();
+
+            if (servingsGroups.Count == 1)
+            {
+                // Single servings value for all dishes
+                var servings = servingsGroups[0].Servings;
+                var count = servingsGroups[0].Count;
+                sb.AppendLine($"- Le nombre de personnes (\"personnes\") dans CHAQUE recette DOIT être EXACTEMENT {servings}. Tu génères {count} plat(s), et CHAQUE plat doit avoir \"personnes\": {servings} dans le JSON.");
+            }
+            else
+            {
+                // Multiple servings values
+                var servingsInfo = string.Join(", ", servingsGroups.Select(g => $"{g.Count} plat(s) pour {g.Servings} personne(s)"));
+                sb.AppendLine($"- Le nombre de personnes (\"personnes\") dans chaque recette DOIT correspondre exactement aux spécifications: {servingsInfo}. Répartis correctement les plats selon le nombre de personnes requis pour chaque groupe.");
+            }
+        }
+        
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir le nombre total de calories (kcal) du plat. Calcule les calories en fonction des ingrédients et de leurs quantités.");
