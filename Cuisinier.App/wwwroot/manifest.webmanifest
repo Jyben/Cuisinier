@@ -1,0 +1,20 @@
+{
+  "name": "Cuisinier - Générateur de menus",
+  "short_name": "Cuisinier",
+  "description": "Générez des menus de la semaine personnalisés avec des recettes adaptées à vos préférences.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFF8F0",
+  "theme_color": "#E85A4F",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "lang": "fr",
+  "categories": ["food", "lifestyle"]
+}
