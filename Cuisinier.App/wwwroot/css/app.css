@@ -472,13 +472,30 @@ h4 {
     h1 {
         font-size: 2rem;
     }
-    
+
     h2 {
         font-size: 1.75rem;
     }
-    
+
     .mud-card-content {
         padding: 1.25rem !important;
+    }
+}
+
+/* Mobile: Prevent zoom on tap for numeric fields and inputs */
+.mud-input-control button,
+.mud-numeric-field button,
+.mud-input input,
+.mud-input-slot input {
+    touch-action: manipulation;
+}
+
+/* Mobile: Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+@media (max-width: 960px) {
+    .mud-input input,
+    .mud-input-slot input,
+    .mud-input-root input {
+        font-size: 16px !important;
     }
 }
 
