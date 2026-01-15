@@ -14,4 +14,10 @@ public class ApplicationUser : IdentityUser
     public List<ShoppingList> ShoppingLists { get; set; } = new();
     public List<RefreshToken> RefreshTokens { get; set; } = new();
     public MenuSettings? MenuSettings { get; set; }
+
+    // Family link navigation properties
+    public List<FamilyLink> FamilyLinksAsUser1 { get; set; } = new();
+    public List<FamilyLink> FamilyLinksAsUser2 { get; set; } = new();
+    public List<FamilyLinkInvitation> SentInvitations { get; set; } = new();
+    public List<FamilyLinkInvitation> ReceivedInvitations { get; set; } = new();
 }

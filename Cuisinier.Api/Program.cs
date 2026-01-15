@@ -114,6 +114,8 @@ builder.Services.AddScoped<BackgroundRecipeService>();
 builder.Services.AddScoped<BackgroundMenuService>();
 builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IRecipeQueryService, RecipeQueryService>();
+builder.Services.AddScoped<IFamilyLinkService, FamilyLinkService>();
+builder.Services.AddScoped<IUserAccessService, UserAccessService>();
 
 // Add FluentValidation
 builder.Services.AddFluentValidationAutoValidation();
@@ -294,5 +296,6 @@ app.MapRecipeEndpoints();
 app.MapShoppingListEndpoints();
 app.MapFavoriteEndpoints();
 app.MapDishEndpoints();
+app.MapFamilyLinkEndpoints();
 
 app.Run();

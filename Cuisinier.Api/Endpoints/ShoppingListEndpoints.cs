@@ -5,6 +5,7 @@ using Cuisinier.Infrastructure.Data;
 using Cuisinier.Infrastructure.Services;
 using Cuisinier.Infrastructure.Mappings;
 using Cuisinier.Api.Helpers;
+using Cuisinier.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -44,7 +45,8 @@ public static class ShoppingListEndpoints
     private static async Task<IResult> GetShoppingList(
         int menuId,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -52,10 +54,12 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var shoppingList = await context.ShoppingLists
             .Include(l => l.Items)
             .Include(l => l.Menu)
-            .Where(l => l.MenuId == menuId && l.UserId == userId)
+            .Where(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId))
             .FirstOrDefaultAsync();
 
         if (shoppingList == null)
@@ -70,7 +74,8 @@ public static class ShoppingListEndpoints
         int menuId,
         AddItemRequest request,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -78,9 +83,11 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
-        // Check that menu belongs to user
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Check that menu belongs to accessible users
         var menu = await context.Menus
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -88,14 +95,14 @@ public static class ShoppingListEndpoints
         }
 
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId));
 
         if (shoppingList == null)
         {
-            // Create shopping list if it doesn't exist
+            // Create shopping list if it doesn't exist (owned by menu owner)
             shoppingList = new ShoppingList
             {
-                UserId = userId,
+                UserId = menu.UserId,
                 MenuId = menuId,
                 CreationDate = DateTime.UtcNow
             };
@@ -125,7 +132,8 @@ public static class ShoppingListEndpoints
         int menuId,
         int itemId,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -133,8 +141,10 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId));
 
         if (shoppingList == null)
         {
@@ -159,6 +169,7 @@ public static class ShoppingListEndpoints
         int menuId,
         ClaimsPrincipal user,
         CuisinierDbContext context,
+        IUserAccessService userAccessService,
         IMemoryCache cache)
     {
         var userId = user.GetUserId();
@@ -167,8 +178,10 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var shoppingList = await context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId));
 
         if (shoppingList == null)
         {
@@ -178,8 +191,11 @@ public static class ShoppingListEndpoints
         context.ShoppingLists.Remove(shoppingList);
         await context.SaveChangesAsync();
 
-        // Invalidate menus cache (menus list only shows menus with shopping lists)
-        cache.Remove($"Menu_All_{userId}");
+        // Invalidate menus cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            cache.Remove($"Menu_All_{uid}");
+        }
 
         return Results.NoContent();
     }
@@ -187,7 +203,8 @@ public static class ShoppingListEndpoints
     private static async Task<IResult> ValidateShoppingList(
         int menuId,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -195,9 +212,11 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var shoppingList = await context.ShoppingLists
             .Include(l => l.Items)
-            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId));
 
         if (shoppingList == null)
         {
@@ -213,6 +232,7 @@ public static class ShoppingListEndpoints
         ClaimsPrincipal user,
         CuisinierDbContext context,
         IOpenAIService openAIService,
+        IUserAccessService userAccessService,
         ILogger<Program> logger)
     {
         var userId = user.GetUserId();
@@ -221,10 +241,12 @@ public static class ShoppingListEndpoints
             return Results.Unauthorized();
         }
 
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var menu = await context.Menus
             .Include(m => m.Recipes)
                 .ThenInclude(r => r.Ingredients)
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {

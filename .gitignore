@@ -191,3 +191,4 @@ yarn-error.log
 docs/
 scripts/
 .cursor/
+.claude/

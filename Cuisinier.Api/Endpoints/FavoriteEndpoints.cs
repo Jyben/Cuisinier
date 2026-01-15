@@ -3,6 +3,7 @@ using Cuisinier.Shared.DTOs;
 using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
 using Cuisinier.Api.Helpers;
+using Cuisinier.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cuisinier.Api.Endpoints;
@@ -63,7 +64,8 @@ public static class FavoriteEndpoints
 
     private static async Task<IResult> GetAllFavorites(
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -71,9 +73,12 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var favorites = await context.Favorites
             .Include(f => f.Ingredients)
-            .Where(f => f.UserId == userId)
+            .Where(f => accessibleUserIds.Contains(f.UserId))
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync();
 
@@ -84,7 +89,8 @@ public static class FavoriteEndpoints
     private static async Task<IResult> GetFavorite(
         int id,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -92,9 +98,12 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+            .FirstOrDefaultAsync(f => f.Id == id && accessibleUserIds.Contains(f.UserId));
 
         if (favorite == null)
         {
@@ -107,7 +116,8 @@ public static class FavoriteEndpoints
     private static async Task<IResult> AddFavorite(
         FavoriteRequest request,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -115,10 +125,13 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
-        // Check for duplicate (same title and same ingredients)
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Check for duplicate (same title and same ingredients) in all accessible favorites
         var existingFavorite = await CheckForDuplicateAsync(
             context,
-            userId,
+            accessibleUserIds,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList());
 
@@ -162,7 +175,8 @@ public static class FavoriteEndpoints
         int id,
         FavoriteRequest request,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -170,19 +184,22 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+            .FirstOrDefaultAsync(f => f.Id == id && accessibleUserIds.Contains(f.UserId));
 
         if (favorite == null)
         {
             return Results.NotFound();
         }
 
-        // Check for duplicate (excluding current favorite)
+        // Check for duplicate (excluding current favorite) in all accessible favorites
         var existingFavorite = await CheckForDuplicateAsync(
             context,
-            userId,
+            accessibleUserIds,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList(),
             excludeId: id);
@@ -225,7 +242,8 @@ public static class FavoriteEndpoints
     private static async Task<IResult> DeleteFavorite(
         int id,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -233,9 +251,12 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var favorite = await context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId);
+            .FirstOrDefaultAsync(f => f.Id == id && accessibleUserIds.Contains(f.UserId));
 
         if (favorite == null)
         {
@@ -251,7 +272,8 @@ public static class FavoriteEndpoints
     private static async Task<IResult> CheckDuplicate(
         CheckDuplicateRequest request,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -259,9 +281,12 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var exists = await CheckForDuplicateAsync(
             context,
-            userId,
+            accessibleUserIds,
             request.Title,
             request.Ingredients.Select(i => (i.Name, i.Quantity)).ToList()) != null;
 
@@ -271,7 +296,8 @@ public static class FavoriteEndpoints
     private static async Task<IResult> CheckDuplicatesBatch(
         CheckDuplicatesBatchRequest request,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IUserAccessService userAccessService)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -279,10 +305,13 @@ public static class FavoriteEndpoints
             return Results.Unauthorized();
         }
 
-        // Load all favorites once for better performance (filtered by userId)
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Load all favorites once for better performance (filtered by accessible users)
         var allFavorites = await context.Favorites
             .Include(f => f.Ingredients)
-            .Where(f => f.UserId == userId)
+            .Where(f => accessibleUserIds.Contains(f.UserId))
             .ToListAsync();
 
         var matches = new List<RecipeDuplicateMatch>();
@@ -354,7 +383,7 @@ public static class FavoriteEndpoints
 
     private static async Task<Favorite?> CheckForDuplicateAsync(
         CuisinierDbContext context,
-        string userId,
+        List<string> accessibleUserIds,
         string title,
         List<(string Name, string Quantity)> ingredients,
         int? excludeId = null)
@@ -362,10 +391,10 @@ public static class FavoriteEndpoints
         // Normalize title for comparison (case-insensitive, trim)
         var normalizedTitle = title.Trim().ToLower();
 
-        // Load all favorites with ingredients into memory first (filtered by userId)
+        // Load all favorites with ingredients into memory first (filtered by accessible users)
         var allFavorites = await context.Favorites
             .Include(f => f.Ingredients)
-            .Where(f => f.UserId == userId)
+            .Where(f => accessibleUserIds.Contains(f.UserId))
             .ToListAsync();
 
         // Filter in memory (case-insensitive comparison)

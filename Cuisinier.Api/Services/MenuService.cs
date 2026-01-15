@@ -17,6 +17,7 @@ public class MenuService : IMenuService
     private readonly BackgroundRecipeService _backgroundRecipeService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<MenuService> _logger;
+    private readonly IUserAccessService _userAccessService;
 
     private const string LastParametersCacheKey = "Menu_LastParameters";
     private const string MenuCacheKeyPrefix = "Menu_";
@@ -29,13 +30,15 @@ public class MenuService : IMenuService
         IOpenAIService openAIService,
         BackgroundRecipeService backgroundRecipeService,
         IMemoryCache cache,
-        ILogger<MenuService> logger)
+        ILogger<MenuService> logger,
+        IUserAccessService userAccessService)
     {
         _context = context;
         _openAIService = openAIService;
         _backgroundRecipeService = backgroundRecipeService;
         _cache = cache;
         _logger = logger;
+        _userAccessService = userAccessService;
     }
 
     public async Task<int> StartMenuGenerationAsync(MenuGenerationRequest request, string userId)
@@ -378,7 +381,7 @@ public class MenuService : IMenuService
     public async Task<MenuResponse?> GetMenuAsync(int id, string userId)
     {
         var cacheKey = $"{MenuCacheKeyPrefix}{userId}_{id}";
-        
+
         // Try to get from cache first
         if (_cache.TryGetValue(cacheKey, out MenuResponse? cachedMenu))
         {
@@ -388,10 +391,13 @@ public class MenuService : IMenuService
 
         _logger.LogInformation("Retrieving menu from database. MenuId: {MenuId}, UserId: {UserId}", id, userId);
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var menu = await _context.Menus
             .Include(m => m.Recipes)
                 .ThenInclude(r => r.Ingredients)
-            .FirstOrDefaultAsync(m => m.Id == id && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == id && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -400,9 +406,9 @@ public class MenuService : IMenuService
         }
 
         var menuResponse = menu.ToResponse();
-        
+
         // Cache the result (only cache validated menus to avoid caching temporary data)
-        var isValidated = await _context.ShoppingLists.AnyAsync(sl => sl.MenuId == id && sl.UserId == userId);
+        var isValidated = await _context.ShoppingLists.AnyAsync(sl => sl.MenuId == id && accessibleUserIds.Contains(sl.UserId));
         if (isValidated)
         {
             _cache.Set(cacheKey, menuResponse, MenuCacheExpiration);
@@ -425,7 +431,7 @@ public class MenuService : IMenuService
     public async Task<List<MenuResponse>> GetAllMenusAsync(string userId)
     {
         var cacheKey = $"{AllMenusCacheKey}_{userId}";
-        
+
         // Try to get from cache first
         if (_cache.TryGetValue(cacheKey, out List<MenuResponse>? cachedMenus))
         {
@@ -435,19 +441,22 @@ public class MenuService : IMenuService
 
         _logger.LogInformation("Retrieving all menus from database. UserId: {UserId}", userId);
 
-        // Only return validated menus (menus that have a shopping list) for this user
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Only return validated menus (menus that have a shopping list) for accessible users
         var menus = await _context.Menus
             .Include(m => m.Recipes)
                 .ThenInclude(r => r.Ingredients)
-            .Where(m => m.UserId == userId && _context.ShoppingLists.Any(sl => sl.MenuId == m.Id && sl.UserId == userId))
+            .Where(m => accessibleUserIds.Contains(m.UserId) && _context.ShoppingLists.Any(sl => sl.MenuId == m.Id && accessibleUserIds.Contains(sl.UserId)))
             .OrderByDescending(m => m.WeekStartDate)
             .ToListAsync();
 
         var menuResponses = menus.Select(m => m.ToResponse()).ToList();
-        
+
         // Cache the result
         _cache.Set(cacheKey, menuResponses, MenuCacheExpiration);
-        
+
         _logger.LogInformation("All menus retrieved and cached. Count: {Count}, UserId: {UserId}", menuResponses.Count, userId);
 
         return menuResponses;
@@ -677,17 +686,21 @@ public class MenuService : IMenuService
     {
         _logger.LogInformation("Adding favorite to menu. MenuId: {MenuId}, FavoriteId: {FavoriteId}", menuId, favoriteId);
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var menu = await _context.Menus
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
             throw new KeyNotFoundException($"Menu {menuId} not found for user {userId}");
         }
 
+        // Favorites are user-specific, but we allow adding favorites from linked users
         var favorite = await _context.Favorites
             .Include(f => f.Ingredients)
-            .FirstOrDefaultAsync(f => f.Id == favoriteId && f.UserId == userId);
+            .FirstOrDefaultAsync(f => f.Id == favoriteId && accessibleUserIds.Contains(f.UserId));
 
         if (favorite == null)
         {
@@ -728,7 +741,7 @@ public class MenuService : IMenuService
         // Update shopping list if it exists (menu already validated)
         var existingShoppingList = await _context.ShoppingLists
             .Include(sl => sl.Items)
-            .FirstOrDefaultAsync(sl => sl.MenuId == menuId && sl.UserId == userId);
+            .FirstOrDefaultAsync(sl => sl.MenuId == menuId && accessibleUserIds.Contains(sl.UserId));
 
         if (existingShoppingList != null)
         {
@@ -755,9 +768,12 @@ public class MenuService : IMenuService
                 recipe.Ingredients.Count);
         }
 
-        // Invalidate cache
-        _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
-        _cache.Remove($"{AllMenusCacheKey}_{userId}");
+        // Invalidate cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+            _cache.Remove($"{AllMenusCacheKey}_{uid}");
+        }
 
         _logger.LogInformation("Favorite added to menu successfully. MenuId: {MenuId}, RecipeId: {RecipeId}, UserId: {UserId}", menuId, recipe.Id, userId);
 
@@ -771,9 +787,12 @@ public class MenuService : IMenuService
             menuId,
             recipeId);
 
-        // Verify menu belongs to user
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Verify menu belongs to user or linked family user
         var menu = await _context.Menus
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -800,7 +819,7 @@ public class MenuService : IMenuService
         // Remove ingredients from shopping list if it exists
         var shoppingList = await _context.ShoppingLists
             .Include(sl => sl.Items)
-            .FirstOrDefaultAsync(sl => sl.MenuId == menuId && sl.UserId == userId);
+            .FirstOrDefaultAsync(sl => sl.MenuId == menuId && accessibleUserIds.Contains(sl.UserId));
 
         if (shoppingList != null && recipeIngredients.Any())
         {
@@ -837,9 +856,12 @@ public class MenuService : IMenuService
             }
         }
 
-        // Invalidate cache
-        _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
-        _cache.Remove($"{AllMenusCacheKey}_{userId}");
+        // Invalidate cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+            _cache.Remove($"{AllMenusCacheKey}_{uid}");
+        }
         _cache.Remove($"Recipe_{recipeId}");
 
         _logger.LogInformation(
@@ -856,9 +878,12 @@ public class MenuService : IMenuService
             menuId,
             recipeId);
 
-        // Verify menu belongs to user
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        // Verify menu belongs to user or linked family user
         var menu = await _context.Menus
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -879,9 +904,12 @@ public class MenuService : IMenuService
         recipe.IsCooked = !recipe.IsCooked;
         await _context.SaveChangesAsync();
 
-        // Invalidate cache
-        _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
-        _cache.Remove($"{AllMenusCacheKey}_{userId}");
+        // Invalidate cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+            _cache.Remove($"{AllMenusCacheKey}_{uid}");
+        }
 
         _logger.LogInformation(
             "Recipe cooked status toggled successfully. MenuId: {MenuId}, RecipeId: {RecipeId}, IsCooked: {IsCooked}, UserId: {UserId}",
@@ -897,8 +925,11 @@ public class MenuService : IMenuService
     {
         _logger.LogInformation("Deleting menu. MenuId: {MenuId}", menuId);
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var menu = await _context.Menus
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -919,9 +950,12 @@ public class MenuService : IMenuService
         _context.Menus.Remove(menu);
         await _context.SaveChangesAsync();
 
-        // Invalidate cache
-        _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
-        _cache.Remove($"{AllMenusCacheKey}_{userId}");
+        // Invalidate cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+            _cache.Remove($"{AllMenusCacheKey}_{uid}");
+        }
 
         _logger.LogInformation("Menu deleted successfully and cache invalidated. MenuId: {MenuId}, UserId: {UserId}", menuId, userId);
     }
@@ -930,10 +964,13 @@ public class MenuService : IMenuService
     {
         _logger.LogInformation("Validating menu. MenuId: {MenuId}", menuId);
 
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
         var menu = await _context.Menus
             .Include(m => m.Recipes)
                 .ThenInclude(r => r.Ingredients)
-            .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
         if (menu == null)
         {
@@ -960,7 +997,7 @@ public class MenuService : IMenuService
                 menu = await _context.Menus
                     .Include(m => m.Recipes)
                         .ThenInclude(r => r.Ingredients)
-                    .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+                    .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
                 if (menu == null)
                 {
@@ -974,12 +1011,12 @@ public class MenuService : IMenuService
             }
         }
 
-        // Add favorites if provided (filtered by userId)
+        // Add favorites if provided (filtered by accessible users)
         if (request?.FavoriteIds != null && request.FavoriteIds.Any())
         {
             var favorites = await _context.Favorites
                 .Include(f => f.Ingredients)
-                .Where(f => request.FavoriteIds.Contains(f.Id) && f.UserId == userId)
+                .Where(f => request.FavoriteIds.Contains(f.Id) && accessibleUserIds.Contains(f.UserId))
                 .ToListAsync();
 
             foreach (var favorite in favorites)
@@ -1015,7 +1052,7 @@ public class MenuService : IMenuService
             menu = await _context.Menus
                 .Include(m => m.Recipes)
                     .ThenInclude(r => r.Ingredients)
-                .FirstOrDefaultAsync(m => m.Id == menuId && m.UserId == userId);
+                .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
 
             if (menu == null)
             {
@@ -1034,7 +1071,7 @@ public class MenuService : IMenuService
 
             // Check if shopping list already exists
         var existingShoppingList = await _context.ShoppingLists
-            .FirstOrDefaultAsync(l => l.MenuId == menuId && l.UserId == userId);
+            .FirstOrDefaultAsync(l => l.MenuId == menuId && accessibleUserIds.Contains(l.UserId));
 
         if (existingShoppingList == null)
         {
@@ -1089,10 +1126,13 @@ public class MenuService : IMenuService
                 "Shopping list generated for menu. MenuId: {MenuId}, ItemsCount: {ItemsCount}",
                 menuId,
                 shoppingList.Items.Count);
-            
-            // Invalidate cache when menu is validated (it becomes a validated menu)
-            _cache.Remove($"{MenuCacheKeyPrefix}{userId}_{menuId}");
-            _cache.Remove($"{AllMenusCacheKey}_{userId}");
+
+            // Invalidate cache when menu is validated (it becomes a validated menu) for all accessible users
+            foreach (var uid in accessibleUserIds)
+            {
+                _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+                _cache.Remove($"{AllMenusCacheKey}_{uid}");
+            }
 
             // Launch detailed recipe generation in background (only for non-favorite recipes without detail)
             var totalRecipes = menu.Recipes.Count;

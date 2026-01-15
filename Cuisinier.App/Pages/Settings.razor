@@ -1,0 +1,369 @@
+@page "/settings"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components
+@using Cuisinier.Shared.DTOs
+@using MudBlazor
+@inject IFamilyApi FamilyApi
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Mon compte</PageTitle>
+
+<PageHeader Title="Mon compte" Icon="@Icons.Material.Filled.Person" />
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.FamilyRestroom" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">Mode Famille</MudText>
+                </MudStack>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Typo="Typo.body2" Class="mb-4" Style="color: rgba(0,0,0,0.6);">
+                Le mode famille vous permet de partager vos menus et listes de courses avec un proche.
+                Les deux utilisateurs peuvent voir et modifier les menus de l'autre.
+            </MudText>
+
+            @if (_status?.ActiveLink != null)
+            {
+                <!-- Lien actif -->
+                <MudPaper Elevation="0" Class="pa-4" Style="background-color: var(--mud-palette-success-lighten); border-radius: 8px;">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Link" Color="Color.Success" />
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600; color: #1b5e20;">
+                                Compte lié
+                            </MudText>
+                        </MudStack>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="ml-7">
+                            <MudAvatar Color="Color.Primary" Size="Size.Small">
+                                @GetInitials(_status.ActiveLink.LinkedUserName)
+                            </MudAvatar>
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body1" Style="font-weight: 500;">@_status.ActiveLink.LinkedUserName</MudText>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.6);">@_status.ActiveLink.LinkedUserEmail</MudText>
+                            </MudStack>
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="ml-7" Style="color: rgba(0,0,0,0.5);">
+                            Lié depuis le @_status.ActiveLink.CreatedAt.ToLocalTime().ToString("dd MMMM yyyy")
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+
+                <MudButton
+                    Variant="Variant.Outlined"
+                    Color="Color.Error"
+                    StartIcon="@Icons.Material.Filled.LinkOff"
+                    OnClick="DeleteFamilyLink"
+                    Class="mt-4"
+                    Style="text-transform: none;">
+                    Supprimer le lien famille
+                </MudButton>
+            }
+            else
+            {
+                <!-- Pas de lien actif -->
+                @if (_status?.PendingSentInvitation != null)
+                {
+                    <!-- Invitation envoyée en attente -->
+                    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="background-color: var(--mud-palette-warning-lighten); border-radius: 8px;">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Send" Color="Color.Warning" />
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600; color: #e65100;">
+                                    Invitation en attente
+                                </MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Class="ml-7">
+                                Vous avez envoyé une invitation à <strong>@_status.PendingSentInvitation.InvitedEmail</strong>
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="ml-7" Style="color: rgba(0,0,0,0.5);">
+                                Expire le @_status.PendingSentInvitation.ExpiresAt.ToLocalTime().ToString("dd MMMM yyyy à HH:mm")
+                            </MudText>
+                            <MudButton
+                                Variant="Variant.Text"
+                                Color="Color.Error"
+                                Size="Size.Small"
+                                StartIcon="@Icons.Material.Filled.Cancel"
+                                OnClick="@(() => CancelInvitation(_status.PendingSentInvitation.Id))"
+                                Class="ml-5"
+                                Style="text-transform: none;">
+                                Annuler l'invitation
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+                else
+                {
+                    <!-- Formulaire d'invitation -->
+                    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="background-color: var(--mud-palette-background-grey); border-radius: 8px;">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 600;">
+                            Inviter un proche
+                        </MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudTextField
+                                @bind-Value="_inviteEmail"
+                                Label="Adresse email"
+                                Variant="Variant.Outlined"
+                                InputType="InputType.Email"
+                                Placeholder="exemple@email.com"
+                                Disabled="_sendingInvitation"
+                                Style="flex: 1;" />
+                            <MudButton
+                                Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Send"
+                                OnClick="SendInvitation"
+                                Disabled="@(string.IsNullOrWhiteSpace(_inviteEmail) || _sendingInvitation)"
+                                Style="text-transform: none;">
+                                @if (_sendingInvitation)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Envoi...</span>
+                                }
+                                else
+                                {
+                                    <span>Envoyer</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                <!-- Invitations reçues -->
+                @if (_status?.PendingReceivedInvitations.Any() == true)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-3 mt-4" Style="font-weight: 600;">
+                        Invitations reçues
+                    </MudText>
+
+                    @foreach (var invitation in _status.PendingReceivedInvitations)
+                    {
+                        <MudPaper Elevation="0" Class="pa-4 mb-3" Style="background-color: var(--mud-palette-info-lighten); border-radius: 8px;">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudAvatar Color="Color.Info" Size="Size.Small">
+                                        @GetInitials(invitation.InviterUserName)
+                                    </MudAvatar>
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@invitation.InviterUserName</MudText>
+                                        <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.6);">@invitation.InviterEmail</MudText>
+                                    </MudStack>
+                                </MudStack>
+                                <MudText Typo="Typo.body2">
+                                    souhaite partager ses menus et listes de courses avec vous.
+                                </MudText>
+                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.5);">
+                                    Expire le @invitation.ExpiresAt.ToLocalTime().ToString("dd MMMM yyyy à HH:mm")
+                                </MudText>
+                                <MudStack Row="true" Spacing="2" Class="mt-2">
+                                    <MudButton
+                                        Variant="Variant.Filled"
+                                        Color="Color.Success"
+                                        Size="Size.Small"
+                                        StartIcon="@Icons.Material.Filled.Check"
+                                        OnClick="@(() => AcceptInvitation(invitation.Id))"
+                                        Disabled="_processingInvitation"
+                                        Style="text-transform: none;">
+                                        Accepter
+                                    </MudButton>
+                                    <MudButton
+                                        Variant="Variant.Outlined"
+                                        Color="Color.Error"
+                                        Size="Size.Small"
+                                        StartIcon="@Icons.Material.Filled.Close"
+                                        OnClick="@(() => RejectInvitation(invitation.Id))"
+                                        Disabled="_processingInvitation"
+                                        Style="text-transform: none;">
+                                        Refuser
+                                    </MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                }
+            }
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    private FamilyStatusResponse? _status;
+    private bool _loading = true;
+    private string _inviteEmail = string.Empty;
+    private bool _sendingInvitation = false;
+    private bool _processingInvitation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFamilyStatus();
+    }
+
+    private async Task LoadFamilyStatus()
+    {
+        try
+        {
+            _loading = true;
+            _status = await FamilyApi.GetFamilyStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Impossible de charger le statut famille : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SendInvitation()
+    {
+        if (string.IsNullOrWhiteSpace(_inviteEmail))
+            return;
+
+        try
+        {
+            _sendingInvitation = true;
+            await FamilyApi.SendInvitationAsync(new SendFamilyInvitationRequest { Email = _inviteEmail.Trim() });
+            Snackbar.Add("Invitation envoyée avec succès", Severity.Success);
+            _inviteEmail = string.Empty;
+            await LoadFamilyStatus();
+        }
+        catch (Refit.ApiException ex)
+        {
+            var message = ex.StatusCode switch
+            {
+                System.Net.HttpStatusCode.BadRequest => "Adresse email invalide ou vous ne pouvez pas vous inviter vous-même",
+                System.Net.HttpStatusCode.Conflict => "Vous avez déjà un lien famille actif ou une invitation en attente",
+                _ => $"Erreur lors de l'envoi : {ex.Message}"
+            };
+            Snackbar.Add(message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur lors de l'envoi : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _sendingInvitation = false;
+        }
+    }
+
+    private async Task AcceptInvitation(int invitationId)
+    {
+        try
+        {
+            _processingInvitation = true;
+            await FamilyApi.AcceptInvitationAsync(new AcceptFamilyInvitationRequest { InvitationId = invitationId });
+            Snackbar.Add("Invitation acceptée ! Vos comptes sont maintenant liés.", Severity.Success);
+            await LoadFamilyStatus();
+        }
+        catch (Refit.ApiException ex)
+        {
+            var message = ex.StatusCode switch
+            {
+                System.Net.HttpStatusCode.NotFound => "Cette invitation n'existe plus ou a expiré",
+                System.Net.HttpStatusCode.Conflict => "Vous avez déjà un lien famille actif",
+                _ => $"Erreur : {ex.Message}"
+            };
+            Snackbar.Add(message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processingInvitation = false;
+        }
+    }
+
+    private async Task RejectInvitation(int invitationId)
+    {
+        try
+        {
+            _processingInvitation = true;
+            await FamilyApi.RejectInvitationAsync(invitationId);
+            Snackbar.Add("Invitation refusée", Severity.Info);
+            await LoadFamilyStatus();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processingInvitation = false;
+        }
+    }
+
+    private async Task CancelInvitation(int invitationId)
+    {
+        try
+        {
+            await FamilyApi.CancelInvitationAsync(invitationId);
+            Snackbar.Add("Invitation annulée", Severity.Info);
+            await LoadFamilyStatus();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteFamilyLink()
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.Title, "Supprimer le lien famille" },
+            { x => x.Message, "Êtes-vous sûr de vouloir supprimer le lien famille ? Vous ne pourrez plus voir ni modifier les menus de votre proche." },
+            { x => x.ConfirmText, "Supprimer" },
+            { x => x.CancelText, "Annuler" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirmation", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await FamilyApi.DeleteFamilyLinkAsync();
+                Snackbar.Add("Lien famille supprimé", Severity.Success);
+                await LoadFamilyStatus();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur lors de la suppression : {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return name.Length >= 2 ? name[..2].ToUpper() : name.ToUpper();
+    }
+}

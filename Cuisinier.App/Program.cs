@@ -73,7 +73,16 @@ builder.Services.AddRefitClient<IFavoriteApi>()
 
 builder.Services.AddRefitClient<IDishApi>()
     .AddHttpMessageHandler<AuthHeaderHandler>()
-    .ConfigureHttpClient((sp, c) => 
+    .ConfigureHttpClient((sp, c) =>
+    {
+        var config = sp.GetRequiredService<IConfiguration>();
+        var url = config["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;
+        c.BaseAddress = new Uri(url);
+    });
+
+builder.Services.AddRefitClient<IFamilyApi>()
+    .AddHttpMessageHandler<AuthHeaderHandler>()
+    .ConfigureHttpClient((sp, c) =>
     {
         var config = sp.GetRequiredService<IConfiguration>();
         var url = config["ApiBaseUrl"] ?? builder.HostEnvironment.BaseAddress;

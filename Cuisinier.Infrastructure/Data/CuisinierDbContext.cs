@@ -23,6 +23,8 @@ public class CuisinierDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<DishIngredient> DishIngredients => Set<DishIngredient>();
     public DbSet<ShoppingListDish> ShoppingListDishes => Set<ShoppingListDish>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<FamilyLink> FamilyLinks => Set<FamilyLink>();
+    public DbSet<FamilyLinkInvitation> FamilyLinkInvitations => Set<FamilyLinkInvitation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -183,6 +185,44 @@ public class CuisinierDbContext : IdentityDbContext<ApplicationUser>
                   .HasForeignKey(e => e.UserId)
                   .IsRequired()
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // FamilyLink configuration
+        modelBuilder.Entity<FamilyLink>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.User1Id);
+            entity.HasIndex(e => e.User2Id);
+            entity.HasIndex(e => new { e.User1Id, e.User2Id }).IsUnique();
+            entity.HasOne(e => e.User1)
+                  .WithMany(e => e.FamilyLinksAsUser1)
+                  .HasForeignKey(e => e.User1Id)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(e => e.User2)
+                  .WithMany(e => e.FamilyLinksAsUser2)
+                  .HasForeignKey(e => e.User2Id)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // FamilyLinkInvitation configuration
+        modelBuilder.Entity<FamilyLinkInvitation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Token);
+            entity.HasIndex(e => e.InviterUserId);
+            entity.HasIndex(e => e.InvitedEmail);
+            entity.HasOne(e => e.InviterUser)
+                  .WithMany(e => e.SentInvitations)
+                  .HasForeignKey(e => e.InviterUserId)
+                  .IsRequired()
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.InvitedUser)
+                  .WithMany(e => e.ReceivedInvitations)
+                  .HasForeignKey(e => e.InvitedUserId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.NoAction);
         });
     }
 }

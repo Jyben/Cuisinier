@@ -140,6 +140,55 @@ public class EmailService : IEmailService
         }
     }
 
+    public async Task SendFamilyInvitationEmailAsync(string recipientEmail, string inviterName, string inviterEmail, string token, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var acceptUrl = $"{_baseUrl}/accept-family-invitation?token={Uri.EscapeDataString(token)}";
+
+            var subject = $"{inviterName} vous invite à partager son compte Cuisinier";
+            var body = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <style>
+        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .button {{ display: inline-block; padding: 12px 24px; background-color: #E85A4F; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
+        .button:hover {{ background-color: #D94A3F; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>Invitation Mode Famille</h1>
+        <p><strong>{inviterName}</strong> ({inviterEmail}) vous invite à partager ses menus et listes de courses sur Cuisinier.</p>
+        <p>En acceptant cette invitation :</p>
+        <ul>
+            <li>Vous pourrez voir et modifier ses menus</li>
+            <li>Vous pourrez voir et modifier ses listes de courses</li>
+            <li>Il pourra également voir et modifier les vôtres</li>
+            <li>Vos paramètres resteront personnels</li>
+        </ul>
+        <a href='{acceptUrl}' class='button'>Accepter l'invitation</a>
+        <p>Ou copiez-collez ce lien dans votre navigateur :</p>
+        <p>{acceptUrl}</p>
+        <p>Ce lien expirera dans 7 jours.</p>
+        <p>Si vous ne connaissez pas cette personne, ignorez cet email.</p>
+    </div>
+</body>
+</html>";
+
+            await SendEmailAsync(recipientEmail, subject, body, cancellationToken);
+            _logger.LogInformation("Family invitation email sent to {Email} from {Inviter}", recipientEmail, inviterEmail);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending family invitation email to {Email}", recipientEmail);
+            throw;
+        }
+    }
+
     private async Task SendEmailAsync(string to, string subject, string body, CancellationToken cancellationToken)
     {
         // Execute with retry policy (exponential backoff using Polly - recommended by Microsoft)
