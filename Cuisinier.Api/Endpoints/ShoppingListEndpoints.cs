@@ -6,6 +6,7 @@ using Cuisinier.Infrastructure.Services;
 using Cuisinier.Infrastructure.Mappings;
 using Cuisinier.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Cuisinier.Api.Endpoints;
 
@@ -157,7 +158,8 @@ public static class ShoppingListEndpoints
     private static async Task<IResult> DeleteShoppingList(
         int menuId,
         ClaimsPrincipal user,
-        CuisinierDbContext context)
+        CuisinierDbContext context,
+        IMemoryCache cache)
     {
         var userId = user.GetUserId();
         if (string.IsNullOrEmpty(userId))
@@ -175,6 +177,9 @@ public static class ShoppingListEndpoints
 
         context.ShoppingLists.Remove(shoppingList);
         await context.SaveChangesAsync();
+
+        // Invalidate menus cache (menus list only shows menus with shopping lists)
+        cache.Remove($"Menu_All_{userId}");
 
         return Results.NoContent();
     }
