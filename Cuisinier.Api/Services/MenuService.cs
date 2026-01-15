@@ -905,6 +905,17 @@ public class MenuService : IMenuService
             throw new KeyNotFoundException($"Menu {menuId} not found for user {userId}");
         }
 
+        // Delete associated shopping lists first (to avoid FK constraint violation)
+        var shoppingLists = await _context.ShoppingLists
+            .Where(sl => sl.MenuId == menuId)
+            .ToListAsync();
+
+        if (shoppingLists.Count != 0)
+        {
+            _logger.LogInformation("Deleting {Count} associated shopping list(s) for menu {MenuId}", shoppingLists.Count, menuId);
+            _context.ShoppingLists.RemoveRange(shoppingLists);
+        }
+
         _context.Menus.Remove(menu);
         await _context.SaveChangesAsync();
 
