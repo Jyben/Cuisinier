@@ -5,7 +5,9 @@
 @using Cuisinier.Shared.DTOs
 @using MudBlazor
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.Extensions.Logging
 @inject IMenuApi MenuApi
+@inject ILogger<MenuDetail> Logger
 @inject IShoppingListApi ShoppingListApi
 @inject IFavoriteApi FavoriteApi
 @inject NavigationManager Navigation
@@ -185,38 +187,26 @@
                     var index = _menu.Recipes.FindIndex(r => r.Id == freshRecipe.Id);
                     if (index >= 0)
                     {
-                        // Update recipe if it now has DetailedRecipe
+                        _menu.Recipes[index] = freshRecipe;
+                        // If recipe now has DetailedRecipe, mark as not generating
                         if (!string.IsNullOrEmpty(freshRecipe.DetailedRecipe))
                         {
-                            _menu.Recipes[index] = freshRecipe;
                             _recipesBeingGenerated[freshRecipe.Id] = false;
                         }
                     }
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore refresh errors
+            Logger.LogWarning(ex, "Failed to refresh recipes state");
         }
     }
 
     private bool IsGenerating(int recipeId)
     {
-        // If the recipe is in the dictionary and marked as being generated
-        if (_recipesBeingGenerated.ContainsKey(recipeId))
-        {
-            return _recipesBeingGenerated[recipeId];
-        }
-        
-        // If the recipe has no DetailedRecipe and the menu is validated, display the skeleton
-        if (_menu != null && _menuValid)
-        {
-            var recipe = _menu.Recipes.FirstOrDefault(r => r.Id == recipeId);
-            return recipe != null && string.IsNullOrEmpty(recipe.DetailedRecipe);
-        }
-        
-        return false;
+        // Only return true if explicitly marked as generating in the dictionary
+        return _recipesBeingGenerated.TryGetValue(recipeId, out var isGenerating) && isGenerating;
     }
 
     private async Task LoadMenu()
@@ -225,17 +215,18 @@
         {
             _loading = true;
             _menu = await MenuApi.GetMenuAsync(MenuId);
-            
+
             // Check if the menu has been validated (if a shopping list exists)
             _menuValid = await VerifyMenuValid();
-            
-            // Reset and rebuild the dictionary based on current recipe state
-            _recipesBeingGenerated.Clear();
+
             _favoriteStatus.Clear();
-            
-            // Mark recipes without DetailedRecipe as being generated
+            _recipesBeingGenerated.Clear();
+
             if (_menu != null && _menuValid)
             {
+                // Mark recipes without DetailedRecipe as being generated
+                // The cache is properly invalidated server-side, so we get fresh data
+                // SignalR events will update the state when generation completes
                 foreach (var recipe in _menu.Recipes.Where(r => string.IsNullOrEmpty(r.DetailedRecipe)))
                 {
                     _recipesBeingGenerated[recipe.Id] = true;

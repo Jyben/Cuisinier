@@ -136,10 +136,16 @@ public class BackgroundRecipeService
 
             if (completeRecipe != null)
             {
-                // Invalidate cache to ensure fresh data on next load
-                _cache.Remove($"{MenuCacheKeyPrefix}{menuId}");
-                _cache.Remove(AllMenusCacheKey);
-                
+                // Get menu to find the userId for cache invalidation
+                var menu = await context.Menus.AsNoTracking().FirstOrDefaultAsync(m => m.Id == menuId);
+                if (menu != null)
+                {
+                    // Invalidate cache for the menu owner
+                    _cache.Remove($"{MenuCacheKeyPrefix}{menu.UserId}_{menuId}");
+                    _cache.Remove($"{AllMenusCacheKey}_{menu.UserId}");
+                    _logger.LogInformation("Cache invalidated for Menu {MenuId}, UserId {UserId}", menuId, menu.UserId);
+                }
+
                 // Send update via SignalR
                 _logger.LogInformation("Sending SignalR notification for Recipe {RecipeId}", recipeId);
                 var updatedRecipe = completeRecipe.ToResponse();

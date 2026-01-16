@@ -97,11 +97,16 @@ public class RecipeReplacementPromptBuilder : IPromptBuilder
 
     private void AppendRecipeToReplace(System.Text.StringBuilder sb)
     {
-        sb.AppendLine($"Génère une nouvelle recette pour remplacer: {_recipeTitle}");
+        sb.AppendLine($"L'utilisateur ne veut PAS de ce plat: \"{_recipeTitle}\"");
         if (!string.IsNullOrEmpty(_recipeDescription))
         {
-            sb.AppendLine($"Description actuelle: {_recipeDescription}");
+            sb.AppendLine($"Description du plat refusé: {_recipeDescription}");
         }
+        sb.AppendLine("\nTu DOIS proposer un plat COMPLÈTEMENT DIFFÉRENT:");
+        sb.AppendLine("- PAS de variante du même plat (si c'était un gratin, ne propose PAS un autre gratin)");
+        sb.AppendLine("- PAS le même type de cuisson (si c'était mijoté, propose autre chose)");
+        sb.AppendLine("- PAS les mêmes ingrédients principaux (si c'était du poulet, propose du poisson ou autre chose)");
+        sb.AppendLine("- Propose un plat avec une base et une technique de cuisson différentes");
     }
 
     private void AppendTimeConstraints(System.Text.StringBuilder sb)
@@ -158,7 +163,7 @@ public class RecipeReplacementPromptBuilder : IPromptBuilder
 
     private void AppendJsonStructure(System.Text.StringBuilder sb)
     {
-        sb.AppendLine("\nGénère une nouvelle recette similaire mais différente, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
+        sb.AppendLine("\nGénère une nouvelle recette TOTALEMENT DIFFÉRENTE, en JSON avec la structure suivante (un objet unique, pas un tableau) :");
         sb.AppendLine(JsonStructure);
         sb.AppendLine("\nIMPORTANT: Le champ \"kcal\" représente les calories PAR PERSONNE, pas pour le plat total. Si \"personnes\": 4 et \"kcal\": 450, cela signifie 450 kcal par personne (soit 1800 kcal pour le plat total de 4 personnes).");
     }
@@ -167,6 +172,18 @@ public class RecipeReplacementPromptBuilder : IPromptBuilder
     {
         sb.AppendLine("\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
         sb.AppendLine("- Tu DOIS générer UNIQUEMENT UN SEUL plat (un objet JSON unique, pas un tableau).");
+        sb.AppendLine($"- Le plat proposé DOIT être COMPLÈTEMENT DIFFÉRENT de \"{_recipeTitle}\". Pas de variante, pas de plat similaire, pas le même type de préparation.");
+
+        // Add time constraints as mandatory
+        if (_maxPreparationTime.HasValue)
+        {
+            sb.AppendLine($"- Le temps de préparation (\"tempsPreparation\") DOIT être INFÉRIEUR OU ÉGAL à {_maxPreparationTime.Value.TotalMinutes} minutes. C'est une contrainte STRICTE.");
+        }
+        if (_maxCookingTime.HasValue)
+        {
+            sb.AppendLine($"- Le temps de cuisson (\"tempsCuisson\") DOIT être INFÉRIEUR OU ÉGAL à {_maxCookingTime.Value.TotalMinutes} minutes. C'est une contrainte STRICTE. Ne propose PAS de plats mijotés ou à cuisson longue si le temps maximum est court.");
+        }
+
         sb.AppendLine("- Les quantités d'ingrédients DOIVENT être proportionnelles au nombre de personnes. Si tu génères un plat pour 1 personne, divise toutes les quantités par 4 par rapport à un plat pour 4 personnes.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir le nombre de calories PAR PERSONNE (\"kcal\") dans le JSON. Calcule les calories de manière réaliste en fonction des ingrédients et de leurs quantités pour une seule personne. Un plat riche en viande, fromage ou crème doit avoir plus de calories qu'un plat principalement végétal.");
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");

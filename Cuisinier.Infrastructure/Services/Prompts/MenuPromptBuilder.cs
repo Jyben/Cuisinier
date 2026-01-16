@@ -274,13 +274,13 @@ public class MenuPromptBuilder : IPromptBuilder
     private void AppendMandatoryConstraints(System.Text.StringBuilder sb)
     {
         var totalDishes = _dishesToGenerate?.Sum(d => d.NumberOfDishes) ?? 0;
-        
+
         sb.AppendLine($"\nIMPORTANT - CONTRAINTES OBLIGATOIRES:");
         if (totalDishes > 0)
         {
             sb.AppendLine($"- Le tableau 'recettes' DOIT contenir EXACTEMENT {totalDishes} recette(s). C'est une contrainte stricte et non négociable.");
         }
-        
+
         // Add constraint about servings per dish
         if (_dishesToGenerate != null && _dishesToGenerate.Any())
         {
@@ -304,7 +304,17 @@ public class MenuPromptBuilder : IPromptBuilder
                 sb.AppendLine($"- Le nombre de personnes (\"personnes\") dans chaque recette DOIT correspondre exactement aux spécifications: {servingsInfo}. Répartis correctement les plats selon le nombre de personnes requis pour chaque groupe.");
             }
         }
-        
+
+        // Add time constraints as mandatory
+        if (_maxPreparationTime.HasValue)
+        {
+            sb.AppendLine($"- Le temps de préparation (\"tempsPreparation\") de CHAQUE recette DOIT être INFÉRIEUR OU ÉGAL à {_maxPreparationTime.Value.TotalMinutes} minutes. C'est une contrainte STRICTE.");
+        }
+        if (_maxCookingTime.HasValue)
+        {
+            sb.AppendLine($"- Le temps de cuisson (\"tempsCuisson\") de CHAQUE recette DOIT être INFÉRIEUR OU ÉGAL à {_maxCookingTime.Value.TotalMinutes} minutes. C'est une contrainte STRICTE. Ne propose PAS de plats mijotés ou à cuisson longue si le temps maximum est court.");
+        }
+
         sb.AppendLine("- Tu NE DOIS PAS générer de desserts (tartes, gâteaux, crèmes, glaces, fruits au sirop, etc.). Uniquement des plats principaux et entrées.");
         sb.AppendLine("- Pour chaque recette, tu DOIS fournir une liste COMPLÈTE et DÉTAILLÉE de TOUS les ingrédients nécessaires pour réaliser le plat. N'omets aucun ingrédient important (viande, poisson, légumes, épices, condiments, produits laitiers, etc.). La liste doit être exhaustive et réaliste.");
         sb.AppendLine("- Les quantités d'ingrédients DOIVENT être proportionnelles au nombre de personnes. Si tu génères un plat pour 1 personne, divise toutes les quantités par 4 par rapport à un plat pour 4 personnes.");
