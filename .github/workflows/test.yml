@@ -1,0 +1,95 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: TestPassword123!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P TestPassword123! -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run Unit Tests
+        run: |
+          dotnet test tests/Cuisinier.UnitTests/Cuisinier.UnitTests.csproj \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=unit-test-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults/UnitTests
+
+      - name: Run Integration Tests
+        env:
+          ConnectionStrings__DefaultConnection: "Server=localhost;Database=CuisinierTest;User Id=sa;Password=TestPassword123!;TrustServerCertificate=true"
+          Jwt__SecretKey: "TestSecretKeyThatIsAtLeast32CharactersLongForTesting!"
+          Jwt__Issuer: "CuisinierTest"
+          Jwt__Audience: "CuisinierTest"
+          Jwt__AccessTokenExpirationMinutes: "15"
+          Jwt__RefreshTokenExpirationDays: "7"
+          OpenAI__ApiKey: "test-key-not-used-in-tests"
+        run: |
+          dotnet test tests/Cuisinier.IntegrationTests/Cuisinier.IntegrationTests.csproj \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=integration-test-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults/IntegrationTests
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./TestResults
+          retention-days: 7
+
+      - name: Generate Coverage Report
+        if: success()
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool || true
+          reportgenerator \
+            -reports:"./TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"./TestResults/CoverageReport" \
+            -reporttypes:Html
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: coverage-report
+          path: ./TestResults/CoverageReport
+          retention-days: 7

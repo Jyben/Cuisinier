@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  workflow_run:
+    workflows: ["Tests"]
+    types:
+      - completed
+    branches:
+      - main
 
 concurrency:
   group: deploy-main
@@ -12,6 +18,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Only deploy if tests passed (or if triggered directly by push)
+    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout (for metadata only)

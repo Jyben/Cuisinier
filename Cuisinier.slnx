@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cuisinier.IntegrationTests/Cuisinier.IntegrationTests.csproj" />
+    <Project Path="tests/Cuisinier.UnitTests/Cuisinier.UnitTests.csproj" />
+  </Folder>
   <Project Path="Cuisinier.Api/Cuisinier.Api.csproj" />
   <Project Path="Cuisinier.App/Cuisinier.App.csproj" />
   <Project Path="Cuisinier.AppHost/Cuisinier.AppHost.csproj" />
