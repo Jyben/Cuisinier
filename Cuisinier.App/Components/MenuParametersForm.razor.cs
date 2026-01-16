@@ -159,6 +159,13 @@ namespace Cuisinier.App.Components
 
         private void InitializeFromParameters()
         {
+            // Ensure legacy collections are initialized
+            Parameters.NumberOfDishes ??= new List<NumberOfDishesDto>();
+            Parameters.DishTypes ??= new Dictionary<string, int?>();
+            Parameters.BannedFoods ??= new List<string>();
+            Parameters.DesiredFoods ??= new List<DesiredFoodDto>();
+            Parameters.WeightedOptions ??= new Dictionary<string, int?>();
+
             // Initialize number of dishes/servings
             if (!Parameters.NumberOfDishes.Any())
             {
@@ -166,7 +173,7 @@ namespace Cuisinier.App.Components
             }
             _numberOfDishesValues = Parameters.NumberOfDishes.Select(x => x.NumberOfDishes).ToList();
             _servingsValues = Parameters.NumberOfDishes.Select(x => x.Servings).ToList();
-            
+
             // Initialize dish types (with optional numbers)
             _dishTypesValues = Parameters.DishTypes.Keys.ToList();
             _numberOfDishTypesValues = Parameters.DishTypes.Values.ToList();
@@ -175,7 +182,7 @@ namespace Cuisinier.App.Components
                 _dishTypesValues = new List<string>();
                 _numberOfDishTypesValues = new List<int?>();
             }
-            
+
             // Initialize desired foods
             _desiredFoods = Parameters.DesiredFoods.Select(a => a.Food).ToList();
             
@@ -254,6 +261,7 @@ namespace Cuisinier.App.Components
 
         public async Task AddBannedFood()
         {
+            Parameters.BannedFoods ??= new List<string>();
             var food = _newBannedFood?.Trim();
             if (!string.IsNullOrWhiteSpace(food) && !Parameters.BannedFoods.Contains(food, StringComparer.OrdinalIgnoreCase))
             {
@@ -266,7 +274,7 @@ namespace Cuisinier.App.Components
 
         public async Task DeleteBannedFood(int index)
         {
-            Parameters.BannedFoods.RemoveAt(index);
+            Parameters.BannedFoods?.RemoveAt(index);
             await Task.CompletedTask;
         }
 
@@ -463,13 +471,18 @@ namespace Cuisinier.App.Components
 
         private void SyncParametersFromUI()
         {
+            // Ensure legacy collections are initialized
+            Parameters.NumberOfDishes ??= new List<NumberOfDishesDto>();
+            Parameters.DishTypes ??= new Dictionary<string, int?>();
+            Parameters.DesiredFoods ??= new List<DesiredFoodDto>();
+
             // Sync number of dishes/servings
             Parameters.NumberOfDishes.Clear();
             for (int i = 0; i < _numberOfDishesValues.Count && i < _servingsValues.Count; i++)
             {
                 Parameters.NumberOfDishes.Add(new NumberOfDishesDto { NumberOfDishes = _numberOfDishesValues[i], Servings = _servingsValues[i] });
             }
-            
+
             // Sync dish types (with optional numbers)
             Parameters.DishTypes.Clear();
             for (int i = 0; i < _dishTypesValues.Count; i++)
@@ -478,7 +491,7 @@ namespace Cuisinier.App.Components
                 var number = i < _numberOfDishTypesValues.Count ? _numberOfDishTypesValues[i] : null;
                 Parameters.DishTypes[type] = number; // null = optional type, value = specific number
             }
-            
+
             // Sync desired foods
             Parameters.DesiredFoods.Clear();
             foreach (var food in _desiredFoods)

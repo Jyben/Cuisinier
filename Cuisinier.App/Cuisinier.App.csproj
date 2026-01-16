@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Temporarily ignore obsolete warnings during migration to new Configurations format -->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

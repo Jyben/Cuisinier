@@ -1,0 +1,169 @@
+@using MudBlazor
+
+<div class="wizard-progress">
+    <!-- Version mobile: dots + texte -->
+    <div class="progress-mobile d-flex d-md-none flex-column align-center">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.Center">
+            @for (int i = 1; i <= TotalSteps; i++)
+            {
+                var step = i;
+                <div class="@GetDotClass(step)" @onclick="@(() => OnStepClick(step))"></div>
+            }
+        </MudStack>
+        <MudText Typo="Typo.subtitle2" Class="mt-2 text-center" Style="color: var(--color-text-secondary);">
+            Étape @CurrentStep : @StepNames[CurrentStep - 1]
+        </MudText>
+    </div>
+
+    <!-- Version desktop: stepper horizontal -->
+    <div class="progress-desktop d-none d-md-block">
+        <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Justify="Justify.Center" Class="stepper-desktop">
+            @for (int i = 1; i <= TotalSteps; i++)
+            {
+                var step = i;
+                <div class="step-item @GetStepClass(step)" @onclick="@(() => OnStepClick(step))">
+                    <div class="step-circle">
+                        @if (step < CurrentStep)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            @step
+                        }
+                    </div>
+                    <span class="step-label">@StepNames[step - 1]</span>
+                </div>
+                @if (step < TotalSteps)
+                {
+                    <div class="step-connector @(step < CurrentStep ? "completed" : "")"></div>
+                }
+            }
+        </MudStack>
+    </div>
+</div>
+
+<style>
+    .wizard-progress {
+        margin-bottom: 1.5rem;
+    }
+
+    /* Mobile dots */
+    .progress-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--color-bg-muted, #e0e0e0);
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .progress-dot.active {
+        background: var(--color-primary, #E85A4F);
+        transform: scale(1.2);
+    }
+
+    .progress-dot.completed {
+        background: var(--color-secondary, #52B788);
+    }
+
+    /* Desktop stepper */
+    .stepper-desktop {
+        padding: 0 1rem;
+    }
+
+    .step-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .step-circle {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.875rem;
+        background: var(--color-bg-muted, #e0e0e0);
+        color: var(--color-text-secondary, #666);
+        transition: all 0.3s ease;
+    }
+
+    .step-item.active .step-circle {
+        background: var(--color-primary, #E85A4F);
+        color: white;
+        box-shadow: 0 4px 12px rgba(232, 90, 79, 0.3);
+    }
+
+    .step-item.completed .step-circle {
+        background: var(--color-secondary, #52B788);
+        color: white;
+    }
+
+    .step-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-secondary, #666);
+        transition: all 0.3s ease;
+    }
+
+    .step-item.active .step-label {
+        color: var(--color-primary, #E85A4F);
+        font-weight: 600;
+    }
+
+    .step-item.completed .step-label {
+        color: var(--color-secondary, #52B788);
+    }
+
+    .step-connector {
+        flex: 1;
+        height: 2px;
+        background: var(--color-bg-muted, #e0e0e0);
+        margin: 0 0.75rem;
+        margin-bottom: 1.5rem;
+        min-width: 40px;
+        max-width: 80px;
+        transition: all 0.3s ease;
+    }
+
+    .step-connector.completed {
+        background: var(--color-secondary, #52B788);
+    }
+</style>
+
+@code {
+    [Parameter] public int CurrentStep { get; set; } = 1;
+    [Parameter] public int TotalSteps { get; set; } = 4;
+    [Parameter] public string[] StepNames { get; set; } = { "Date", "Configurations", "Paramètres", "Résumé" };
+    [Parameter] public EventCallback<int> OnStepChange { get; set; }
+    [Parameter] public bool AllowClickNavigation { get; set; } = false;
+
+    private string GetDotClass(int step)
+    {
+        if (step < CurrentStep) return "progress-dot completed";
+        if (step == CurrentStep) return "progress-dot active";
+        return "progress-dot";
+    }
+
+    private string GetStepClass(int step)
+    {
+        if (step < CurrentStep) return "completed";
+        if (step == CurrentStep) return "active";
+        return "";
+    }
+
+    private async Task OnStepClick(int step)
+    {
+        if (AllowClickNavigation && step <= CurrentStep)
+        {
+            await OnStepChange.InvokeAsync(step);
+        }
+    }
+}

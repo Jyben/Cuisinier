@@ -1,4 +1,6 @@
 @using MudBlazor
+@using Cuisinier.App.Data
+@implements IDisposable
 
 <div class="loading-container">
     <div class="loading-content">
@@ -7,21 +9,21 @@
             <div class="pan">
                 <div class="pan-body"></div>
             </div>
-            
+
             <!-- Flammes/Chaleur -->
             <div class="flames">
                 <div class="flame flame-1"></div>
                 <div class="flame flame-2"></div>
                 <div class="flame flame-3"></div>
             </div>
-            
+
             <!-- Ingrédients qui sautent -->
             <div class="ingredients">
                 <div class="ingredient ingredient-1"></div>
                 <div class="ingredient ingredient-2"></div>
                 <div class="ingredient ingredient-3"></div>
             </div>
-            
+
             <!-- Vapeur -->
             <div class="steam">
                 <div class="steam-cloud steam-1"></div>
@@ -31,12 +33,75 @@
         </div>
         <MudText Typo="Typo.h6" Class="loading-text">@Title</MudText>
         <MudText Typo="Typo.body2" Class="loading-subtext">@Subtitle</MudText>
+
+        @if (ShowAnecdotes)
+        {
+            <div class="anecdote-container @(_isTransitioning ? "fade-out" : "fade-in")">
+                <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Size="Size.Small" Class="anecdote-icon" />
+                <MudText Typo="Typo.body2" Class="anecdote-text">
+                    @_currentAnecdote
+                </MudText>
+            </div>
+        }
     </div>
 </div>
 
 @code {
     [Parameter] public string Title { get; set; } = "Génération de votre menu en cours...";
     [Parameter] public string Subtitle { get; set; } = "Cela peut prendre quelques instants";
+    [Parameter] public bool ShowAnecdotes { get; set; } = true;
+    [Parameter] public int AnecdoteIntervalSeconds { get; set; } = 8;
+
+    private string _currentAnecdote = "";
+    private bool _isTransitioning = false;
+    private int _currentIndex = 0;
+    private Timer? _timer;
+    private readonly Random _random = new();
+
+    protected override void OnInitialized()
+    {
+        if (ShowAnecdotes && CulinaryAnecdotes.Anecdotes.Length > 0)
+        {
+            // Start with a random anecdote
+            _currentIndex = _random.Next(CulinaryAnecdotes.Anecdotes.Length);
+            _currentAnecdote = CulinaryAnecdotes.Anecdotes[_currentIndex];
+
+            // Start timer for rotation
+            _timer = new Timer(RotateAnecdote, null, TimeSpan.FromSeconds(AnecdoteIntervalSeconds), TimeSpan.FromSeconds(AnecdoteIntervalSeconds));
+        }
+    }
+
+    private async void RotateAnecdote(object? state)
+    {
+        await InvokeAsync(async () =>
+        {
+            // Start fade out
+            _isTransitioning = true;
+            StateHasChanged();
+
+            // Wait for fade out animation
+            await Task.Delay(300);
+
+            // Change anecdote (avoid repeating the same one)
+            int newIndex;
+            do
+            {
+                newIndex = _random.Next(CulinaryAnecdotes.Anecdotes.Length);
+            } while (newIndex == _currentIndex && CulinaryAnecdotes.Anecdotes.Length > 1);
+
+            _currentIndex = newIndex;
+            _currentAnecdote = CulinaryAnecdotes.Anecdotes[_currentIndex];
+
+            // Start fade in
+            _isTransitioning = false;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
 }
 
 <style>
@@ -53,6 +118,7 @@
         flex-direction: column;
         align-items: center;
         gap: 2rem;
+        max-width: 500px;
     }
 
     .cooking-scene {
@@ -285,5 +351,52 @@
         margin: 0;
         opacity: 0.8;
     }
-</style>
 
+    /* Anecdotes */
+    .anecdote-container {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        background: linear-gradient(135deg, rgba(232, 90, 79, 0.08) 0%, rgba(255, 170, 92, 0.08) 100%);
+        border-radius: 12px;
+        border-left: 3px solid var(--color-primary, #E85A4F);
+        max-width: 100%;
+        transition: opacity 0.3s ease-in-out;
+    }
+
+    .anecdote-container.fade-out {
+        opacity: 0;
+    }
+
+    .anecdote-container.fade-in {
+        opacity: 1;
+    }
+
+    .anecdote-icon {
+        color: var(--color-primary, #E85A4F);
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .anecdote-text {
+        color: var(--mud-palette-text-secondary);
+        font-style: italic;
+        line-height: 1.5;
+        text-align: left;
+    }
+
+    @@media (max-width: 600px) {
+        .loading-content {
+            padding: 0 1rem;
+        }
+
+        .anecdote-container {
+            padding: 0.875rem 1rem;
+        }
+
+        .anecdote-text {
+            font-size: 0.875rem;
+        }
+    }
+</style>

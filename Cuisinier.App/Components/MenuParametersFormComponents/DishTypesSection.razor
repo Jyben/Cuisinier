@@ -54,13 +54,35 @@
     }
 </div>
 
-<MudButton Variant="Variant.Text" 
-          StartIcon="@Icons.Material.Filled.Add" 
+<MudButton Variant="Variant.Text"
+          StartIcon="@Icons.Material.Filled.Add"
           OnClick="OnAdd"
           FullWidth="true"
           Class="mb-4 mt-3">
     Ajouter un type de plat
 </MudButton>
+
+<style>
+    .type-plat-row .mud-select {
+        min-width: 160px;
+        max-width: 160px;
+    }
+
+    .type-plat-row .mud-input-control {
+        flex-shrink: 0;
+    }
+
+    @@media (max-width: 600px) {
+        .type-plat-row {
+            flex-wrap: wrap;
+        }
+
+        .type-plat-row .mud-select {
+            min-width: 100%;
+            max-width: 100%;
+        }
+    }
+</style>
 
 @code {
     [Parameter] public List<string> TypeOptions { get; set; } = new();

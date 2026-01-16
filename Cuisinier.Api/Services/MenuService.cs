@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cuisinier.Shared.DTOs;
+using Cuisinier.Shared.Helpers;
 using Cuisinier.Core.Entities;
 using Cuisinier.Infrastructure.Data;
 using Cuisinier.Infrastructure.Mappings;
@@ -486,10 +487,21 @@ public class MenuService : IMenuService
         {
             var jsonOptions = JsonOptionsHelper.GetDefaultOptions();
             var parameters = JsonSerializer.Deserialize<MenuParameters>(menuSettings.ParametersJson, jsonOptions);
-            
+
+            // Migrate from legacy format if needed
+            if (parameters != null)
+            {
+                parameters = MenuParametersMigrationHelper.MigrateIfNeeded(parameters);
+
+                if (parameters.IsLegacyFormat)
+                {
+                    _logger.LogInformation("Migrated legacy menu parameters to new format. UserId: {UserId}", userId);
+                }
+            }
+
             // Cache the result
             _cache.Set(cacheKey, parameters, CacheExpiration);
-            
+
             _logger.LogInformation("Retrieved last menu parameters successfully from database and cached. UserId: {UserId}", userId);
             return parameters;
         }

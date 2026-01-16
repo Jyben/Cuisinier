@@ -113,9 +113,10 @@
 
         var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
         var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
-        
+
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
             .Build();
 
         _hubConnection.On<RecipeResponse>("RecipeDetailedGenerated", (recipe) =>
@@ -138,16 +139,65 @@
             InvokeAsync(StateHasChanged);
         });
 
+        // Handle reconnection - refetch data after reconnecting
+        _hubConnection.Reconnected += async (connectionId) =>
+        {
+            try
+            {
+                await _hubConnection.SendAsync("JoinMenuGroup", MenuId);
+                await InvokeAsync(async () =>
+                {
+                    await RefreshRecipesState();
+                    StateHasChanged();
+                });
+            }
+            catch
+            {
+                // Ignore reconnection errors
+            }
+        };
+
         try
         {
             await _hubConnection.StartAsync();
             await _hubConnection.SendAsync("JoinMenuGroup", MenuId);
             _lastConnectedMenuId = MenuId;
+
+            // After joining, refetch to catch any updates we might have missed
+            await RefreshRecipesState();
         }
         catch
         {
             Snackbar.Add($"Erreur de connexion SignalR. Veuillez réessayer.", Severity.Error);
             _lastConnectedMenuId = null;
+        }
+    }
+
+    private async Task RefreshRecipesState()
+    {
+        try
+        {
+            var freshMenu = await MenuApi.GetMenuAsync(MenuId);
+            if (freshMenu != null && _menu != null)
+            {
+                foreach (var freshRecipe in freshMenu.Recipes)
+                {
+                    var index = _menu.Recipes.FindIndex(r => r.Id == freshRecipe.Id);
+                    if (index >= 0)
+                    {
+                        // Update recipe if it now has DetailedRecipe
+                        if (!string.IsNullOrEmpty(freshRecipe.DetailedRecipe))
+                        {
+                            _menu.Recipes[index] = freshRecipe;
+                            _recipesBeingGenerated[freshRecipe.Id] = false;
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore refresh errors
         }
     }
 

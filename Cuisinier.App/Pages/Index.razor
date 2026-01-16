@@ -1,8 +1,9 @@
 @page "/"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
-@using Cuisinier.App.Components
+@using Cuisinier.App.Components.MenuParametersWizard
 @using Cuisinier.App.Services
 @using Cuisinier.Shared.DTOs
+@using Cuisinier.Shared.Helpers
 @using MudBlazor
 @inject IMenuApi MenuApi
 @inject ISnackbar Snackbar
@@ -15,72 +16,33 @@
 {
     <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
 }
-
-<MenuParametersForm Parameters="Parameters" OnGenerate="GenerateMenu" />
+else
+{
+    <MenuParametersWizard Parameters="@_parameters" />
+}
 
 @code {
-    private MenuParameters Parameters = new();
+    private MenuParameters _parameters = new();
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
     {
-        Parameters.WeekStartDate = GetNextMonday();
-        
-        // Load parameters from last created menu
         try
         {
             var lastParameters = await MenuApi.GetLastParametersAsync();
             if (lastParameters != null)
             {
-                // Copy all parameters except date (deep copies for collections)
-                Parameters.NumberOfDishes = lastParameters.NumberOfDishes?.Select(n => new NumberOfDishesDto
-                {
-                    NumberOfDishes = n.NumberOfDishes,
-                    Servings = n.Servings
-                }).ToList() ?? new List<NumberOfDishesDto>();
-                Parameters.DishTypes = lastParameters.DishTypes != null 
-                    ? new Dictionary<string, int?>(lastParameters.DishTypes) 
-                    : new Dictionary<string, int?>();
-                Parameters.BannedFoods = lastParameters.BannedFoods?.ToList() ?? new List<string>();
-                Parameters.DesiredFoods = lastParameters.DesiredFoods?.Select(a => new DesiredFoodDto
-                {
-                    Food = a.Food,
-                    Weight = a.Weight
-                }).ToList() ?? new List<DesiredFoodDto>();
-                Parameters.SeasonalFoods = lastParameters.SeasonalFoods;
-                Parameters.WeightedOptions = lastParameters.WeightedOptions != null 
-                    ? new Dictionary<string, int?>(lastParameters.WeightedOptions) 
-                    : new Dictionary<string, int?>();
-                Parameters.MaxPreparationTime = lastParameters.MaxPreparationTime;
-                Parameters.MaxCookingTime = lastParameters.MaxCookingTime;
-                Parameters.MinKcalPerDish = lastParameters.MinKcalPerDish;
-                Parameters.MaxKcalPerDish = lastParameters.MaxKcalPerDish;
-                // Date remains the one calculated by GetProchainLundi()
+                // Migration is handled by the wizard's EnsureValidParameters
+                _parameters = lastParameters;
             }
         }
         catch
         {
             // In case of error, continue with default parameters
-            // No need to display an error to the user as default parameters work
         }
         finally
         {
             _loading = false;
         }
     }
-
-    private DateTime GetNextMonday()
-    {
-        var today = DateTime.Today;
-        var daysUntilMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
-        if (daysUntilMonday == 0) daysUntilMonday = 7; // If it's already Monday, take the next one
-        return today.AddDays(daysUntilMonday);
-    }
-
-    private async Task GenerateMenu()
-    {
-        // This method will be called by the MenuParametersForm component
-        // via the OnGenerate EventCallback after parameter synchronization
-    }
 }
-

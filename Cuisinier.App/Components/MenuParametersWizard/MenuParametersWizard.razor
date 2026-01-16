@@ -1,0 +1,362 @@
+@using MudBlazor
+@using Cuisinier.Shared.DTOs
+@using Cuisinier.Shared.Helpers
+@using Cuisinier.App.Services
+@using Cuisinier.App.Components.MenuParametersWizard.Navigation
+@using Cuisinier.App.Components.MenuParametersWizard.Steps
+@using Microsoft.AspNetCore.SignalR.Client
+
+@inject IMenuApi MenuApi
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@inject ISnackbar Snackbar
+@inject ILogger<MenuParametersWizard> Logger
+
+@if (_isGenerating)
+{
+    <LoadingAnimation />
+}
+else
+{
+    <MudCard Class="wizard-card">
+        <MudCardContent Class="wizard-content">
+            <!-- Indicateur de progression -->
+            <WizardProgressIndicator
+                CurrentStep="@_currentStep"
+                TotalSteps="4"
+                StepNames="@_stepNames"
+                OnStepChange="@GoToStep"
+                AllowClickNavigation="true" />
+
+            <!-- Contenu de l'étape courante -->
+            <div class="wizard-step-content">
+                @switch (_currentStep)
+                {
+                    case 1:
+                        <WizardStepDate
+                            Date="@Parameters.WeekStartDate"
+                            DateChanged="@OnDateChanged" />
+                        break;
+
+                    case 2:
+                        <WizardStepConfigurations
+                            Configurations="@Parameters.Configurations"
+                            OnRemove="@RemoveConfiguration"
+                            OnAdd="@AddConfiguration"
+                            OnChange="StateHasChanged" />
+                        break;
+
+                    case 3:
+                        <WizardStepParameters
+                            Configurations="@Parameters.Configurations"
+                            SelectedConfigurationId="@_selectedConfigurationId"
+                            OnConfigurationSelect="@OnConfigurationSelected"
+                            SeasonalFoods="@Parameters.SeasonalFoods"
+                            SeasonalFoodsChanged="@OnSeasonalFoodsChanged"
+                            OnChange="StateHasChanged" />
+                        break;
+
+                    case 4:
+                        <WizardStepSummary Parameters="@Parameters" />
+                        break;
+                }
+            </div>
+
+            <!-- Navigation -->
+            <WizardNavigation
+                CurrentStep="@_currentStep"
+                TotalSteps="4"
+                CanGoNext="@CanProceed()"
+                IsGenerating="@_isGenerating"
+                OnPrevious="@GoToPreviousStep"
+                OnNext="@GoToNextStep"
+                OnGenerate="@GenerateMenu" />
+        </MudCardContent>
+    </MudCard>
+}
+
+<style>
+    .wizard-card {
+        margin-bottom: 1rem;
+    }
+
+    .wizard-content {
+        padding: 1.5rem !important;
+    }
+
+    .wizard-step-content {
+        min-height: 300px;
+        padding: 1rem 0;
+    }
+
+    @@media (max-width: 600px) {
+        .wizard-content {
+            padding: 1rem !important;
+        }
+    }
+</style>
+
+@code {
+    [Parameter] public MenuParameters Parameters { get; set; } = new();
+    [Parameter] public EventCallback<MenuParameters> ParametersChanged { get; set; }
+
+    private int _currentStep = 1;
+    private Guid? _selectedConfigurationId;
+    private bool _isGenerating = false;
+    private HubConnection? _hubConnection;
+    private int? _pendingMenuId = null;
+
+    private readonly string[] _stepNames = { "Date", "Configurations", "Paramètres", "Résumé" };
+
+    protected override void OnInitialized()
+    {
+        EnsureValidParameters();
+
+        // Auto-select first configuration
+        if (Parameters.Configurations.Any())
+        {
+            _selectedConfigurationId = Parameters.Configurations.First().Id;
+        }
+    }
+
+    private void EnsureValidParameters()
+    {
+        // Migrate from legacy format if needed
+        Parameters = MenuParametersMigrationHelper.MigrateIfNeeded(Parameters);
+
+        // Ensure at least one configuration exists
+        if (!Parameters.Configurations.Any())
+        {
+            Parameters.Configurations.Add(new DishConfigurationDto
+            {
+                NumberOfDishes = 5,
+                Servings = 2,
+                Parameters = new DishConfigurationParametersDto()
+            });
+        }
+
+        // Ensure WeekStartDate is set to a Monday
+        if (Parameters.WeekStartDate == default)
+        {
+            Parameters.WeekStartDate = GetNextMonday();
+        }
+    }
+
+    private bool CanProceed()
+    {
+        return _currentStep switch
+        {
+            1 => Parameters.WeekStartDate != default,
+            2 => Parameters.Configurations.Any() && Parameters.Configurations.All(c => c.NumberOfDishes > 0 && c.Servings > 0),
+            3 => ValidateAllConfigurations(),
+            4 => true,
+            _ => false
+        };
+    }
+
+    private bool ValidateAllConfigurations()
+    {
+        foreach (var config in Parameters.Configurations)
+        {
+            var p = config.Parameters;
+            // Check calories consistency
+            if (p.MinKcalPerDish.HasValue && p.MaxKcalPerDish.HasValue && p.MinKcalPerDish > p.MaxKcalPerDish)
+                return false;
+        }
+        return true;
+    }
+
+    private void GoToStep(int step)
+    {
+        if (step >= 1 && step <= 4 && step <= _currentStep)
+        {
+            _currentStep = step;
+        }
+    }
+
+    private void GoToNextStep()
+    {
+        if (_currentStep < 4 && CanProceed())
+        {
+            _currentStep++;
+
+            // Auto-select first configuration when entering step 3
+            if (_currentStep == 3 && _selectedConfigurationId == null && Parameters.Configurations.Any())
+            {
+                _selectedConfigurationId = Parameters.Configurations.First().Id;
+            }
+        }
+    }
+
+    private void GoToPreviousStep()
+    {
+        if (_currentStep > 1)
+        {
+            _currentStep--;
+        }
+    }
+
+    private void OnDateChanged(DateTime? date)
+    {
+        Parameters.WeekStartDate = date ?? GetNextMonday();
+        StateHasChanged();
+    }
+
+    private void OnConfigurationSelected(Guid? id)
+    {
+        _selectedConfigurationId = id;
+        StateHasChanged();
+    }
+
+    private void OnSeasonalFoodsChanged(bool value)
+    {
+        Parameters.SeasonalFoods = value;
+        StateHasChanged();
+    }
+
+    private void AddConfiguration()
+    {
+        var lastConfig = Parameters.Configurations.LastOrDefault();
+        var newConfig = new DishConfigurationDto
+        {
+            NumberOfDishes = 5,
+            Servings = 2,
+            Parameters = lastConfig != null
+                ? MenuParametersMigrationHelper.CloneParameters(lastConfig.Parameters)
+                : new DishConfigurationParametersDto()
+        };
+
+        Parameters.Configurations.Add(newConfig);
+
+        // Auto-select the new configuration
+        _selectedConfigurationId = newConfig.Id;
+        StateHasChanged();
+    }
+
+    private void RemoveConfiguration(int index)
+    {
+        if (Parameters.Configurations.Count > 1 && index < Parameters.Configurations.Count)
+        {
+            var removedId = Parameters.Configurations[index].Id;
+            Parameters.Configurations.RemoveAt(index);
+
+            // If we removed the selected config, select another one
+            if (_selectedConfigurationId == removedId)
+            {
+                _selectedConfigurationId = Parameters.Configurations.FirstOrDefault()?.Id;
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateMenu()
+    {
+        try
+        {
+            _isGenerating = true;
+            StateHasChanged();
+
+            // Initialize SignalR connection
+            await InitializeSignalRConnectionAsync();
+
+            // Create request
+            var request = new MenuGenerationRequest
+            {
+                Parameters = Parameters
+            };
+
+            // Call API
+            var response = await MenuApi.GenerateMenuAsync(request);
+
+            // Join menu group for notifications
+            _pendingMenuId = response.MenuId;
+            await JoinMenuGroupAsync(response.MenuId);
+
+            Logger.LogInformation("Menu generation started. MenuId: {MenuId}", response.MenuId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error starting menu generation");
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InitializeSignalRConnectionAsync()
+    {
+        var apiBaseUrl = Configuration["ApiBaseUrl"] ?? Navigation.BaseUri;
+        if (string.IsNullOrWhiteSpace(apiBaseUrl))
+        {
+            Logger.LogError("Unable to determine API base URL for SignalR hub connection.");
+            Snackbar.Add("Erreur de configuration du serveur.", Severity.Error);
+            throw new InvalidOperationException("Unable to determine API base URL for SignalR hub connection");
+        }
+
+        var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/recipeHub";
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<MenuResponse>("MenuGenerated", (menu) =>
+        {
+            if (_pendingMenuId == menu.Id)
+            {
+                Logger.LogInformation("Menu generated notification received. MenuId: {MenuId}", menu.Id);
+                _isGenerating = false;
+                _pendingMenuId = null;
+                InvokeAsync(() =>
+                {
+                    StateHasChanged();
+                    Navigation.NavigateTo($"/menu-generation/{menu.Id}");
+                });
+            }
+        });
+
+        _hubConnection.On<int>("MenuGenerationError", (menuId) =>
+        {
+            if (_pendingMenuId == menuId)
+            {
+                Logger.LogError("Menu generation error. MenuId: {MenuId}", menuId);
+                _isGenerating = false;
+                _pendingMenuId = null;
+                InvokeAsync(() =>
+                {
+                    Snackbar.Add("Erreur lors de la génération du menu.", Severity.Error);
+                    StateHasChanged();
+                });
+            }
+        });
+
+        await _hubConnection.StartAsync();
+    }
+
+    private async Task JoinMenuGroupAsync(int menuId)
+    {
+        if (_hubConnection?.State == HubConnectionState.Connected)
+        {
+            await _hubConnection.SendAsync("JoinMenuGroup", menuId);
+            Logger.LogInformation("Joined menu group. MenuId: {MenuId}", menuId);
+        }
+    }
+
+    private static DateTime GetNextMonday()
+    {
+        var today = DateTime.Today;
+        int daysUntilMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
+        if (daysUntilMonday == 0 && today.DayOfWeek != DayOfWeek.Monday)
+        {
+            daysUntilMonday = 7;
+        }
+        return today.AddDays(daysUntilMonday);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}

@@ -9,36 +9,54 @@ public class MenuParametersValidator : AbstractValidator<MenuParameters>
     {
         RuleFor(x => x.WeekStartDate)
             .NotEmpty()
-            .WithMessage("Week start date is required")
+            .WithMessage("La date de début de semaine est requise")
             .Must(BeValidWeekStartDate)
-            .WithMessage("Week start date must be a Monday");
+            .WithMessage("La date de début de semaine doit être un lundi");
 
+        // Nouveau format : Configurations
+        RuleFor(x => x.Configurations)
+            .NotEmpty()
+            .WithMessage("Au moins une configuration est requise")
+            .When(x => !x.IsLegacyFormat);
+
+        RuleForEach(x => x.Configurations)
+            .SetValidator(new Cuisinier.Shared.Validators.DishConfigurationDtoValidator())
+            .When(x => !x.IsLegacyFormat);
+
+        // Ancien format (rétrocompatibilité) : NumberOfDishes
+#pragma warning disable CS0618 // Type or member is obsolete
         RuleFor(x => x.NumberOfDishes)
             .NotEmpty()
-            .WithMessage("At least one number of dishes configuration is required");
+            .WithMessage("Au moins une configuration de nombre de plats est requise")
+            .When(x => x.IsLegacyFormat);
 
         RuleForEach(x => x.NumberOfDishes)
-            .SetValidator(new NumberOfDishesDtoValidator());
+            .SetValidator(new NumberOfDishesDtoValidator())
+            .When(x => x.IsLegacyFormat);
 
         RuleFor(x => x.MaxPreparationTime)
             .Must(time => !time.HasValue || time.Value.TotalMinutes > 0)
-            .WithMessage("Maximum preparation time must be positive");
+            .WithMessage("Le temps de préparation maximum doit être positif")
+            .When(x => x.IsLegacyFormat);
 
         RuleFor(x => x.MaxCookingTime)
             .Must(time => !time.HasValue || time.Value.TotalMinutes > 0)
-            .WithMessage("Maximum cooking time must be positive");
+            .WithMessage("Le temps de cuisson maximum doit être positif")
+            .When(x => x.IsLegacyFormat);
 
         RuleFor(x => x.MinKcalPerDish)
             .GreaterThanOrEqualTo(0)
-            .When(x => x.MinKcalPerDish.HasValue);
-            
+            .When(x => x.IsLegacyFormat && x.MinKcalPerDish.HasValue);
+
         RuleFor(x => x.MaxKcalPerDish)
             .GreaterThanOrEqualTo(0)
-            .When(x => x.MaxKcalPerDish.HasValue);
-            
+            .When(x => x.IsLegacyFormat && x.MaxKcalPerDish.HasValue);
+
         RuleFor(x => x)
             .Must(x => !x.MinKcalPerDish.HasValue || !x.MaxKcalPerDish.HasValue || x.MinKcalPerDish.Value <= x.MaxKcalPerDish.Value)
-            .WithMessage("Les calories minimales doivent être inférieures ou égales aux calories maximales");
+            .WithMessage("Les calories minimales doivent être inférieures ou égales aux calories maximales")
+            .When(x => x.IsLegacyFormat);
+#pragma warning restore CS0618
     }
 
     private bool BeValidWeekStartDate(DateTime date)

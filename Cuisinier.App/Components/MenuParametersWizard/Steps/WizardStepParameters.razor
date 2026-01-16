@@ -1,0 +1,304 @@
+@using MudBlazor
+@using Cuisinier.Shared.DTOs
+@using Cuisinier.App.Components.MenuParametersWizard.ConfigurationEditor
+@using Cuisinier.App.Components.MenuParametersFormComponents
+
+<div class="wizard-step-parameters">
+    <MudText Typo="Typo.h5" Class="mb-2">Paramètres détaillés</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color: var(--color-text-secondary);">
+        Personnalisez les paramètres pour chaque configuration
+    </MudText>
+
+    <!-- Sélecteur de configuration -->
+    @if (Configurations.Count > 1)
+    {
+        <ConfigurationSelector
+            Configurations="Configurations"
+            SelectedId="SelectedConfigurationId"
+            SelectedIdChanged="OnConfigurationSelect"
+            OnCopyClick="@(() => ShowCopyDialog = true)"
+            ShowCopyButton="true" />
+    }
+
+    @if (SelectedConfiguration != null)
+    {
+        <!-- Paramètre global : Aliments de saison -->
+        <SeasonalFoodsSection
+            Value="@_seasonalFoodOption"
+            ValueChanged="@OnSeasonalFoodOptionChanged" />
+
+        <MudDivider Class="my-4" />
+
+        <!-- Paramètres par configuration -->
+        <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 600; color: var(--color-primary);">
+            @GetConfigLabel(SelectedConfiguration)
+        </MudText>
+
+        <!-- Types de plats -->
+        <DishTypesSection
+            TypeOptions="_dishTypeOptions"
+            TypesValues="_dishTypesValues"
+            NumberValues="_numberOfDishTypesValues"
+            OnRemove="DeleteDishType"
+            OnAdd="AddDishType"
+            OnChange="SyncToConfiguration" />
+
+        <!-- Aliments à bannir -->
+        <BannedFoodsSection
+            BannedFoods="_bannedFoods"
+            NewFood="@_newBannedFood"
+            NewFoodChanged="@((string value) => _newBannedFood = value)"
+            OnRemove="DeleteBannedFood"
+            OnAdd="AddBannedFood" />
+
+        <!-- Aliments souhaités -->
+        <DesiredFoodsSection
+            DesiredFoods="_desiredFoods"
+            NewFood="@_newDesiredFood"
+            NewFoodChanged="@((string value) => _newDesiredFood = value)"
+            OnRemove="DeleteDesiredFood"
+            OnAdd="AddDesiredFood" />
+
+        <!-- Options pondérées -->
+        <WeightedOptionsSection
+            WeightedOptions="_weightedOptions"
+            OptionsWithIntensity="_optionsWithIntensity"
+            BooleanOptions="_booleanOptions"
+            OnChange="SyncToConfiguration" />
+
+        <!-- Temps de préparation et cuisson -->
+        <TimeConstraintsSection
+            LimitPreparation="@_limitPreparationTime"
+            LimitPreparationChanged="@((bool value) => { _limitPreparationTime = value; SyncToConfiguration(); StateHasChanged(); })"
+            MaxPreparationMinutes="@_maxPreparationTimeMinutes"
+            MaxPreparationMinutesChanged="@((int? value) => { _maxPreparationTimeMinutes = value; SyncToConfiguration(); StateHasChanged(); })"
+            LimitCooking="@_limitCookingTime"
+            LimitCookingChanged="@((bool value) => { _limitCookingTime = value; SyncToConfiguration(); StateHasChanged(); })"
+            MaxCookingMinutes="@_maxCookingTimeMinutes"
+            MaxCookingMinutesChanged="@((int? value) => { _maxCookingTimeMinutes = value; SyncToConfiguration(); StateHasChanged(); })" />
+
+        <!-- Calories -->
+        <NutritionSection
+            LimitKcal="@_limitKcal"
+            LimitKcalChanged="@((bool value) => { _limitKcal = value; SyncToConfiguration(); StateHasChanged(); })"
+            MinValue="@_minKcal"
+            MinValueChanged="@((int? value) => { _minKcal = value; SyncToConfiguration(); StateHasChanged(); })"
+            MaxValue="@_maxKcal"
+            MaxValueChanged="@((int? value) => { _maxKcal = value; SyncToConfiguration(); StateHasChanged(); })" />
+    }
+
+    <!-- Dialog de copie (placeholder pour la phase 4) -->
+    <MudDialog @bind-Visible="ShowCopyDialog">
+        <TitleContent>
+            <MudText Typo="Typo.h6">Copier les paramètres</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudText>Fonctionnalité à venir...</MudText>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="@(() => ShowCopyDialog = false)">Fermer</MudButton>
+        </DialogActions>
+    </MudDialog>
+</div>
+
+@code {
+    [Parameter] public List<DishConfigurationDto> Configurations { get; set; } = new();
+    [Parameter] public Guid? SelectedConfigurationId { get; set; }
+    [Parameter] public EventCallback<Guid?> OnConfigurationSelect { get; set; }
+    [Parameter] public bool SeasonalFoods { get; set; } = true;
+    [Parameter] public EventCallback<bool> SeasonalFoodsChanged { get; set; }
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private bool ShowCopyDialog { get; set; } = false;
+    private string _seasonalFoodOption = "toujours";
+    private Guid? _lastLoadedConfigurationId = null;
+
+    // Local state for current configuration
+    private List<string> _dishTypesValues = new();
+    private List<int?> _numberOfDishTypesValues = new();
+    private List<string> _bannedFoods = new();
+    private List<string> _desiredFoods = new();
+    private Dictionary<string, int?> _weightedOptions = new();
+    private bool _limitPreparationTime = false;
+    private int? _maxPreparationTimeMinutes = 15;
+    private bool _limitCookingTime = false;
+    private int? _maxCookingTimeMinutes = 30;
+    private bool _limitKcal = false;
+    private int? _minKcal = null;
+    private int? _maxKcal = null;
+    private string _newBannedFood = "";
+    private string _newDesiredFood = "";
+
+    // Options fixes
+    private List<string> _dishTypeOptions = new() { "Viande rouge", "Viande blanche", "Poisson", "Légumes" };
+    private List<string> _optionsWithIntensity = new() { "Équilibré", "Gourmand" };
+    private List<string> _booleanOptions = new() { "Végan", "Végétarien", "Sans gluten", "Sans lactose" };
+
+    private DishConfigurationDto? SelectedConfiguration =>
+        Configurations.FirstOrDefault(c => c.Id == SelectedConfigurationId);
+
+    protected override void OnInitialized()
+    {
+        _seasonalFoodOption = SeasonalFoods ? "toujours" : "jamais";
+        LoadFromSelectedConfiguration(force: true);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Only reload if the selected configuration changed
+        if (_lastLoadedConfigurationId != SelectedConfigurationId)
+        {
+            LoadFromSelectedConfiguration(force: true);
+        }
+    }
+
+    private void LoadFromSelectedConfiguration(bool force = false)
+    {
+        var config = SelectedConfiguration;
+        if (config == null) return;
+
+        // Skip if already loaded and not forced
+        if (!force && _lastLoadedConfigurationId == config.Id) return;
+
+        _lastLoadedConfigurationId = config.Id;
+
+        var p = config.Parameters;
+        _dishTypesValues = p.DishTypes.Keys.ToList();
+        _numberOfDishTypesValues = p.DishTypes.Values.ToList();
+        _bannedFoods = new List<string>(p.BannedFoods);
+        _desiredFoods = p.DesiredFoods.Select(d => d.Food).ToList();
+        _weightedOptions = new Dictionary<string, int?>(p.WeightedOptions);
+
+        _limitPreparationTime = p.MaxPreparationTime.HasValue;
+        _maxPreparationTimeMinutes = p.MaxPreparationTime.HasValue
+            ? (int)p.MaxPreparationTime.Value.TotalMinutes
+            : 15;
+
+        _limitCookingTime = p.MaxCookingTime.HasValue;
+        _maxCookingTimeMinutes = p.MaxCookingTime.HasValue
+            ? (int)p.MaxCookingTime.Value.TotalMinutes
+            : 30;
+
+        _limitKcal = p.MinKcalPerDish.HasValue || p.MaxKcalPerDish.HasValue;
+        _minKcal = p.MinKcalPerDish;
+        _maxKcal = p.MaxKcalPerDish;
+    }
+
+    private void SyncToConfiguration()
+    {
+        var config = SelectedConfiguration;
+        if (config == null) return;
+
+        var p = config.Parameters;
+
+        // Sync dish types
+        p.DishTypes.Clear();
+        for (int i = 0; i < _dishTypesValues.Count; i++)
+        {
+            var type = _dishTypesValues[i];
+            var number = i < _numberOfDishTypesValues.Count ? _numberOfDishTypesValues[i] : null;
+            p.DishTypes[type] = number;
+        }
+
+        // Sync banned foods
+        p.BannedFoods = new List<string>(_bannedFoods);
+
+        // Sync desired foods
+        p.DesiredFoods = _desiredFoods
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => new DesiredFoodDto { Food = f, Weight = 0 })
+            .ToList();
+
+        // Sync weighted options
+        p.WeightedOptions = new Dictionary<string, int?>(_weightedOptions);
+
+        // Sync times
+        p.MaxPreparationTime = _limitPreparationTime && _maxPreparationTimeMinutes.HasValue
+            ? TimeSpan.FromMinutes(_maxPreparationTimeMinutes.Value)
+            : null;
+        p.MaxCookingTime = _limitCookingTime && _maxCookingTimeMinutes.HasValue
+            ? TimeSpan.FromMinutes(_maxCookingTimeMinutes.Value)
+            : null;
+
+        // Sync calories
+        p.MinKcalPerDish = _limitKcal ? _minKcal : null;
+        p.MaxKcalPerDish = _limitKcal ? _maxKcal : null;
+
+        OnChange.InvokeAsync();
+    }
+
+    private async Task OnSeasonalFoodOptionChanged(string value)
+    {
+        _seasonalFoodOption = value;
+        var isSeasonalFoods = value == "toujours" || value == "partiellement";
+        await SeasonalFoodsChanged.InvokeAsync(isSeasonalFoods);
+    }
+
+    private string GetConfigLabel(DishConfigurationDto config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.Name))
+            return $"Paramètres pour « {config.Name} »";
+        return $"Paramètres pour {config.NumberOfDishes} plats / {config.Servings} personnes";
+    }
+
+    // Dish types
+    private void AddDishType()
+    {
+        _dishTypesValues.Add(_dishTypeOptions.First());
+        _numberOfDishTypesValues.Add(null);
+        SyncToConfiguration();
+    }
+
+    private void DeleteDishType(int index)
+    {
+        if (index < _dishTypesValues.Count)
+        {
+            _dishTypesValues.RemoveAt(index);
+            if (index < _numberOfDishTypesValues.Count)
+                _numberOfDishTypesValues.RemoveAt(index);
+            SyncToConfiguration();
+        }
+    }
+
+    // Banned foods
+    private void AddBannedFood()
+    {
+        var food = _newBannedFood?.Trim();
+        if (!string.IsNullOrWhiteSpace(food) && !_bannedFoods.Contains(food, StringComparer.OrdinalIgnoreCase))
+        {
+            _bannedFoods.Add(food);
+            _newBannedFood = "";
+            SyncToConfiguration();
+        }
+    }
+
+    private void DeleteBannedFood(int index)
+    {
+        if (index < _bannedFoods.Count)
+        {
+            _bannedFoods.RemoveAt(index);
+            SyncToConfiguration();
+        }
+    }
+
+    // Desired foods
+    private void AddDesiredFood()
+    {
+        var food = _newDesiredFood?.Trim();
+        if (!string.IsNullOrWhiteSpace(food) && !_desiredFoods.Contains(food, StringComparer.OrdinalIgnoreCase))
+        {
+            _desiredFoods.Add(food);
+            _newDesiredFood = "";
+            SyncToConfiguration();
+        }
+    }
+
+    private void DeleteDesiredFood(int index)
+    {
+        if (index < _desiredFoods.Count)
+        {
+            _desiredFoods.RemoveAt(index);
+            SyncToConfiguration();
+        }
+    }
+}

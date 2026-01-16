@@ -1,0 +1,162 @@
+@using MudBlazor
+@using Cuisinier.Shared.DTOs
+
+<div class="wizard-step-summary">
+    <MudText Typo="Typo.h5" Class="mb-2">Récapitulatif</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color: var(--color-text-secondary);">
+        Vérifiez vos paramètres avant de générer le menu
+    </MudText>
+
+    <!-- Date -->
+    <MudPaper Elevation="0" Class="summary-section mb-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.caption" Style="color: var(--color-text-secondary);">Semaine du</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                    @Parameters.WeekStartDate.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("fr-FR"))
+                </MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Total des plats -->
+    <MudPaper Elevation="0" Class="summary-section mb-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Restaurant" Color="Color.Primary" />
+            <div>
+                <MudText Typo="Typo.caption" Style="color: var(--color-text-secondary);">Total</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                    @GetTotalDishes() plats
+                </MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Configurations -->
+    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2" Style="color: var(--color-text-secondary);">
+        @Parameters.Configurations.Count configuration(s)
+    </MudText>
+
+    @foreach (var config in Parameters.Configurations)
+    {
+        <MudPaper Elevation="1" Class="config-summary-card mb-2">
+            <MudStack Spacing="2" Class="pa-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                        @GetConfigLabel(config)
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @config.NumberOfDishes plats
+                    </MudChip>
+                </MudStack>
+
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @if (config.Parameters.DishTypes.Any())
+                    {
+                        @foreach (var type in config.Parameters.DishTypes)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                                @type.Key@(type.Value.HasValue ? $" ({type.Value})" : "")
+                            </MudChip>
+                        }
+                    }
+
+                    @foreach (var option in config.Parameters.WeightedOptions.Where(o => o.Value.HasValue))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Text">
+                            @option.Key
+                        </MudChip>
+                    }
+
+                    @if (config.Parameters.MaxPreparationTime.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                            Prép. ≤ @((int)config.Parameters.MaxPreparationTime.Value.TotalMinutes) min
+                        </MudChip>
+                    }
+
+                    @if (config.Parameters.MaxCookingTime.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                            Cuisson ≤ @((int)config.Parameters.MaxCookingTime.Value.TotalMinutes) min
+                        </MudChip>
+                    }
+
+                    @if (config.Parameters.MinKcalPerDish.HasValue || config.Parameters.MaxKcalPerDish.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">
+                            @GetKcalLabel(config.Parameters)
+                        </MudChip>
+                    }
+                </MudStack>
+
+                @if (config.Parameters.BannedFoods.Any())
+                {
+                    <MudText Typo="Typo.caption" Style="color: var(--color-text-secondary);">
+                        Sans : @string.Join(", ", config.Parameters.BannedFoods.Take(3))@(config.Parameters.BannedFoods.Count > 3 ? $" (+{config.Parameters.BannedFoods.Count - 3})" : "")
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <!-- Option globale -->
+    <MudPaper Elevation="0" Class="summary-section mt-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Spa" Color="@(Parameters.SeasonalFoods ? Color.Secondary : Color.Default)" />
+            <MudText Typo="Typo.body2">
+                Aliments de saison : @(Parameters.SeasonalFoods ? "Oui" : "Non")
+            </MudText>
+        </MudStack>
+    </MudPaper>
+</div>
+
+<style>
+    .wizard-step-summary {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .summary-section {
+        padding: 1rem;
+        background: var(--color-bg-muted, #f5f5f5) !important;
+        border-radius: var(--radius-md, 12px) !important;
+    }
+
+    .config-summary-card {
+        border-radius: var(--radius-md, 12px) !important;
+        border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .flex-wrap {
+        flex-wrap: wrap !important;
+    }
+</style>
+
+@code {
+    [Parameter] public MenuParameters Parameters { get; set; } = new();
+
+    private int GetTotalDishes()
+    {
+        return Parameters.Configurations.Sum(c => c.NumberOfDishes);
+    }
+
+    private string GetConfigLabel(DishConfigurationDto config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.Name))
+            return config.Name;
+        return $"{config.NumberOfDishes} plats pour {config.Servings} pers.";
+    }
+
+    private string GetKcalLabel(DishConfigurationParametersDto p)
+    {
+        if (p.MinKcalPerDish.HasValue && p.MaxKcalPerDish.HasValue)
+            return $"{p.MinKcalPerDish} - {p.MaxKcalPerDish} kcal";
+        if (p.MinKcalPerDish.HasValue)
+            return $"≥ {p.MinKcalPerDish} kcal";
+        if (p.MaxKcalPerDish.HasValue)
+            return $"≤ {p.MaxKcalPerDish} kcal";
+        return "";
+    }
+}

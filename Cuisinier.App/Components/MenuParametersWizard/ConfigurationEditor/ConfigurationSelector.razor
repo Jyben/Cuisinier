@@ -1,0 +1,98 @@
+@using MudBlazor
+@using Cuisinier.Shared.DTOs
+
+<div class="configuration-selector">
+    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: var(--color-text-secondary);">
+        Configuration à paramétrer
+    </MudText>
+
+    <div class="config-chips">
+        @foreach (var config in Configurations)
+        {
+            var configId = config.Id;
+            var isSelected = configId == SelectedId;
+            <MudChip T="Guid?"
+                     Value="@configId"
+                     Color="@(isSelected ? Color.Primary : Color.Default)"
+                     Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                     Size="@(isSelected ? Size.Medium : Size.Small)"
+                     Icon="@(isSelected ? Icons.Material.Filled.Edit : null)"
+                     OnClick="@(() => OnSelectionChanged(configId))"
+                     Class="@($"config-chip {(isSelected ? "selected" : "unselected")}")">
+                @GetConfigLabel(config)
+            </MudChip>
+        }
+    </div>
+
+    @if (Configurations.Count > 1 && ShowCopyButton)
+    {
+        <MudButton Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.ContentCopy"
+                   Size="Size.Small"
+                   Color="Color.Primary"
+                   OnClick="@(() => OnCopyClick.InvokeAsync())"
+                   Class="mt-2 copy-button">
+            Copier les paramètres...
+        </MudButton>
+    }
+</div>
+
+<style>
+    .configuration-selector {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: var(--color-bg-muted, #f8f9fa);
+        border-radius: var(--radius-md, 12px);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    .config-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .config-chip {
+        transition: all 0.2s ease !important;
+    }
+
+    .config-chip.selected {
+        font-weight: 700 !important;
+        box-shadow: 0 4px 12px rgba(232, 90, 79, 0.35) !important;
+        transform: scale(1.02);
+    }
+
+    .config-chip.unselected {
+        font-weight: 400 !important;
+        opacity: 0.7;
+    }
+
+    .config-chip.unselected:hover {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+
+    .copy-button {
+        font-size: 0.75rem !important;
+    }
+</style>
+
+@code {
+    [Parameter] public List<DishConfigurationDto> Configurations { get; set; } = new();
+    [Parameter] public Guid? SelectedId { get; set; }
+    [Parameter] public EventCallback<Guid?> SelectedIdChanged { get; set; }
+    [Parameter] public EventCallback OnCopyClick { get; set; }
+    [Parameter] public bool ShowCopyButton { get; set; } = true;
+
+    private string GetConfigLabel(DishConfigurationDto config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.Name))
+            return config.Name;
+        return $"{config.NumberOfDishes} plats / {config.Servings} pers.";
+    }
+
+    private async Task OnSelectionChanged(Guid? id)
+    {
+        await SelectedIdChanged.InvokeAsync(id);
+    }
+}

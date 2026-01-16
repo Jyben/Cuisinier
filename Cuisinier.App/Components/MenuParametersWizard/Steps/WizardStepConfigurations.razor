@@ -1,0 +1,170 @@
+@using MudBlazor
+@using Cuisinier.Shared.DTOs
+
+<div class="wizard-step-configurations">
+    <MudText Typo="Typo.h5" Class="mb-2">Vos configurations</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color: var(--color-text-secondary);">
+        Définissez combien de plats vous voulez pour chaque nombre de personnes
+    </MudText>
+
+    <div class="configurations-list">
+        @for (int i = 0; i < Configurations.Count; i++)
+        {
+            var index = i;
+            var config = Configurations[index];
+            <MudPaper Elevation="1" Class="configuration-card mb-3">
+                <MudStack Spacing="3" Class="pa-3">
+                    @if (Configurations.Count > 1)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.subtitle2" Style="color: var(--color-text-secondary);">
+                                Configuration @(index + 1)
+                            </MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           Variant="Variant.Text"
+                                           OnClick="@(() => OnRemove.InvokeAsync(index))" />
+                        </MudStack>
+                    }
+
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="config-fields">
+                        <MudNumericField T="int"
+                                         Value="@config.NumberOfDishes"
+                                         ValueChanged="@((int value) => UpdateNumberOfDishes(index, value))"
+                                         Label="Plats"
+                                         Min="1"
+                                         Max="20"
+                                         Variant="Variant.Outlined"
+                                         Class="config-field" />
+
+                        <MudText Typo="Typo.body1" Style="color: var(--color-text-secondary); padding-top: 0.5rem;">
+                            pour
+                        </MudText>
+
+                        <MudNumericField T="int"
+                                         Value="@config.Servings"
+                                         ValueChanged="@((int value) => UpdateServings(index, value))"
+                                         Label="Personnes"
+                                         Min="1"
+                                         Max="20"
+                                         Variant="Variant.Outlined"
+                                         Class="config-field" />
+                    </MudStack>
+
+                    <MudTextField T="string"
+                                  Value="@config.Name"
+                                  ValueChanged="@((string? value) => UpdateName(index, value))"
+                                  Label="Nom (optionnel)"
+                                  Placeholder="Ex: Semaine, Week-end..."
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Label"
+                                  Class="config-name-field" />
+                </MudStack>
+            </MudPaper>
+        }
+    </div>
+
+    <MudButton Variant="Variant.Text"
+               StartIcon="@Icons.Material.Filled.Add"
+               Color="Color.Primary"
+               OnClick="OnAdd"
+               FullWidth="true"
+               Class="add-config-button">
+        Ajouter une configuration
+    </MudButton>
+
+    <MudText Typo="Typo.caption" Class="mt-3 text-center" Style="color: var(--color-text-muted);">
+        Chaque configuration peut avoir ses propres paramètres (types de plats, régime, etc.)
+    </MudText>
+</div>
+
+<style>
+    .wizard-step-configurations {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+
+    .configuration-card {
+        border-radius: var(--radius-md, 12px) !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        transition: all 0.2s ease;
+    }
+
+    .configuration-card:hover {
+        border-color: rgba(232, 90, 79, 0.3) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .config-fields {
+        flex-wrap: wrap;
+    }
+
+    .config-field {
+        flex: 1;
+        min-width: 100px;
+        max-width: 120px;
+    }
+
+    .config-name-field {
+        margin-top: 0.5rem;
+    }
+
+    .add-config-button {
+        border: 2px dashed rgba(232, 90, 79, 0.3) !important;
+        border-radius: var(--radius-md, 12px) !important;
+        padding: 1rem !important;
+    }
+
+    .add-config-button:hover {
+        border-color: var(--color-primary, #E85A4F) !important;
+        background: rgba(232, 90, 79, 0.05) !important;
+    }
+
+    @@media (max-width: 600px) {
+        .config-fields {
+            flex-direction: column;
+            gap: 0.5rem !important;
+        }
+
+        .config-field {
+            max-width: 100%;
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    [Parameter] public List<DishConfigurationDto> Configurations { get; set; } = new();
+    [Parameter] public EventCallback<int> OnRemove { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private async Task UpdateNumberOfDishes(int index, int value)
+    {
+        if (index < Configurations.Count)
+        {
+            Configurations[index].NumberOfDishes = value;
+            await OnChange.InvokeAsync();
+        }
+    }
+
+    private async Task UpdateServings(int index, int value)
+    {
+        if (index < Configurations.Count)
+        {
+            Configurations[index].Servings = value;
+            await OnChange.InvokeAsync();
+        }
+    }
+
+    private async Task UpdateName(int index, string? value)
+    {
+        if (index < Configurations.Count)
+        {
+            Configurations[index].Name = value;
+            await OnChange.InvokeAsync();
+        }
+    }
+}

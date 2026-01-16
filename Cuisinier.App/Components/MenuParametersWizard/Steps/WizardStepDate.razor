@@ -1,0 +1,41 @@
+@using MudBlazor
+
+<div class="wizard-step-date">
+    <MudText Typo="Typo.h5" Class="mb-2">Date du menu</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4" Style="color: var(--color-text-secondary);">
+        Sélectionnez la date de début de votre menu
+    </MudText>
+
+    <MudDatePicker
+        Date="@Date"
+        DateChanged="@OnDateChanged"
+        MinDate="@DateTime.Today.AddYears(-1)"
+        MaxDate="@DateTime.Today.AddYears(1)"
+        Label="Date du menu"
+        Variant="Variant.Outlined"
+        DateFormat="dddd d MMMM yyyy"
+        Culture="@(new System.Globalization.CultureInfo("fr-FR"))"
+        Class="date-picker-large" />
+</div>
+
+<style>
+    .wizard-step-date {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 1rem 0;
+    }
+
+    .date-picker-large {
+        font-size: 1.1rem;
+    }
+</style>
+
+@code {
+    [Parameter] public DateTime? Date { get; set; }
+    [Parameter] public EventCallback<DateTime?> DateChanged { get; set; }
+
+    private async Task OnDateChanged(DateTime? newDate)
+    {
+        await DateChanged.InvokeAsync(newDate);
+    }
+}

@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Cuisinier.Shared.DTOs;
+using Cuisinier.Shared.Helpers;
 using Cuisinier.Infrastructure.Services.Options;
 using Cuisinier.Infrastructure.Services.Prompts;
 using Cuisinier.Infrastructure.Services.Mappers;
@@ -42,9 +43,15 @@ public class OpenAIService : IOpenAIService
     {
         try
         {
-            var totalDishes = parameters.NumberOfDishes.Any() 
-                ? parameters.NumberOfDishes.Sum(item => item.NumberOfDishes) 
-                : 0;
+            // Migrate legacy parameters if needed
+            parameters = MenuParametersMigrationHelper.MigrateIfNeeded(parameters);
+
+            if (!parameters.Configurations.Any())
+            {
+                throw new InvalidOperationException("No configurations defined");
+            }
+
+            var totalDishes = parameters.Configurations.Sum(c => c.NumberOfDishes);
 
             if (totalDishes == 0)
             {
@@ -53,37 +60,61 @@ public class OpenAIService : IOpenAIService
 
             var maxDishesPerBatch = _options.MaxDishesPerBatch;
             var allRecipes = new List<RecipeResponse>();
-
-            // Si le nombre total est <= maxDishesPerBatch, on fait un seul appel
-            if (totalDishes <= maxDishesPerBatch)
-            {
-                var menuResponse = await GenerateMenuBatchAsync(parameters, parameters.NumberOfDishes, new List<string>());
-                return menuResponse;
-            }
-
-            // Sinon, on découpe en plusieurs appels en préservant la distribution des portions
-            var batches = DistributeDishesIntoBatches(parameters.NumberOfDishes, maxDishesPerBatch);
             var generatedTitles = new List<string>();
 
-            foreach (var batch in batches)
+            // Generate dishes for each configuration separately (each has its own parameters)
+            foreach (var config in parameters.Configurations)
             {
-                var dishesInThisBatch = batch.Sum(d => d.NumberOfDishes);
-                
                 _logger.LogInformation(
-                    "Generating batch: {DishesInBatch} dishes (already generated: {AlreadyGenerated})",
-                    dishesInThisBatch,
+                    "Generating {NumberOfDishes} dishes for {Servings} servings (already generated: {AlreadyGenerated})",
+                    config.NumberOfDishes,
+                    config.Servings,
                     generatedTitles.Count);
 
-                var batchResponse = await GenerateMenuBatchAsync(parameters, batch, generatedTitles);
-                
-                allRecipes.AddRange(batchResponse.Recipes);
-                
-                // Ajouter les titres générés pour éviter les doublons
-                generatedTitles.AddRange(batchResponse.Recipes.Select(r => r.Title));
-                
+                // Build NumberOfDishesDto list for this configuration
+                var dishCountsForConfig = new List<NumberOfDishesDto>
+                {
+                    new NumberOfDishesDto
+                    {
+                        NumberOfDishes = config.NumberOfDishes,
+                        Servings = config.Servings
+                    }
+                };
+
+                // If this config exceeds max batch size, split into batches
+                if (config.NumberOfDishes <= maxDishesPerBatch)
+                {
+                    var configResponse = await GenerateMenuBatchAsync(
+                        parameters,
+                        config.Parameters,
+                        dishCountsForConfig,
+                        generatedTitles);
+
+                    allRecipes.AddRange(configResponse.Recipes);
+                    generatedTitles.AddRange(configResponse.Recipes.Select(r => r.Title));
+                }
+                else
+                {
+                    // Split into batches
+                    var batches = DistributeDishesIntoBatches(dishCountsForConfig, maxDishesPerBatch);
+
+                    foreach (var batch in batches)
+                    {
+                        var batchResponse = await GenerateMenuBatchAsync(
+                            parameters,
+                            config.Parameters,
+                            batch,
+                            generatedTitles);
+
+                        allRecipes.AddRange(batchResponse.Recipes);
+                        generatedTitles.AddRange(batchResponse.Recipes.Select(r => r.Title));
+                    }
+                }
+
                 _logger.LogInformation(
-                    "Batch completed: {Generated} dishes generated",
-                    batchResponse.Recipes.Count);
+                    "Configuration completed: {NumberOfDishes} dishes for {Servings} servings",
+                    config.NumberOfDishes,
+                    config.Servings);
             }
 
             // Vérifier qu'on a bien le nombre attendu
@@ -156,30 +187,31 @@ public class OpenAIService : IOpenAIService
     }
 
     private async Task<MenuResponse> GenerateMenuBatchAsync(
-        MenuParameters parameters, 
-        List<NumberOfDishesDto> dishesToGenerate, 
+        MenuParameters globalParameters,
+        DishConfigurationParametersDto configParams,
+        List<NumberOfDishesDto> dishesToGenerate,
         List<string> generatedTitles)
     {
         var promptBuilder = new MenuPromptBuilder()
-            .WithWeekStartDate(parameters.WeekStartDate)
+            .WithWeekStartDate(globalParameters.WeekStartDate)
             .WithDishCounts(dishesToGenerate)
             .WithAlreadyGeneratedTitles(generatedTitles)
-            .WithDishTypes(parameters.DishTypes)
-            .WithBannedFoods(parameters.BannedFoods)
-            .WithDesiredFoods(parameters.DesiredFoods)
-            .WithSeasonalFoods(parameters.SeasonalFoods, parameters.WeekStartDate)
-            .WithCalorieConstraints(parameters.MinKcalPerDish, parameters.MaxKcalPerDish)
-            .WithDietaryConstraints(parameters.WeightedOptions)
-            .WithMaxPreparationTime(parameters.MaxPreparationTime)
-            .WithMaxCookingTime(parameters.MaxCookingTime);
-        
+            .WithDishTypes(configParams.DishTypes)
+            .WithBannedFoods(configParams.BannedFoods)
+            .WithDesiredFoods(configParams.DesiredFoods)
+            .WithSeasonalFoods(globalParameters.SeasonalFoods, globalParameters.WeekStartDate)
+            .WithCalorieConstraints(configParams.MinKcalPerDish, configParams.MaxKcalPerDish)
+            .WithDietaryConstraints(configParams.WeightedOptions)
+            .WithMaxPreparationTime(configParams.MaxPreparationTime)
+            .WithMaxCookingTime(configParams.MaxCookingTime);
+
         var prompt = promptBuilder.Build();
-        
+
         var systemMessage = "Tu es un expert en cuisine française qui génère des menus de la semaine. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";
-        
+
         _logger.LogInformation("Menu batch generation - System prompt: {SystemMessage}", systemMessage);
         _logger.LogInformation("Menu batch generation - User prompt: {Prompt}", prompt);
-        
+
         var chatMessages = new ChatMessage[]
         {
             new SystemChatMessage(systemMessage),
@@ -193,18 +225,18 @@ public class OpenAIService : IOpenAIService
 
         var completion = await _chatClient.CompleteChatAsync(chatMessages, options);
         var completionValue = completion.Value;
-        
-        var jsonResponse = completionValue.Content[0].Text 
+
+        var jsonResponse = completionValue.Content[0].Text
             ?? throw new InvalidOperationException("Empty OpenAI response");
-        
+
         jsonResponse = CleanJsonResponse(jsonResponse);
-        
+
         _logger.LogInformation("OpenAI batch response received: {Length} characters", jsonResponse.Length);
-        
+
         var menuData = JsonSerializer.Deserialize<MenuResponseDto>(jsonResponse, _jsonOptions)
             ?? throw new InvalidOperationException("Unable to deserialize OpenAI response");
 
-        return _mapper.MapToMenuResponse(menuData, parameters.WeekStartDate);
+        return _mapper.MapToMenuResponse(menuData, globalParameters.WeekStartDate);
     }
 
     public async Task<string> GenerateDetailedRecipeAsync(string recipeTitle, List<IngredientResponse> ingredients, string shortDescription)
@@ -247,15 +279,23 @@ public class OpenAIService : IOpenAIService
     {
         try
         {
+            // Migrate legacy parameters if needed
+            parameters = MenuParametersMigrationHelper.MigrateIfNeeded(parameters);
+
+            // Use the first configuration's parameters for recipe replacement
+            // (In a future version, we could match the recipe to its original configuration)
+            var configParams = parameters.Configurations.FirstOrDefault()?.Parameters
+                ?? new DishConfigurationParametersDto();
+
             var promptBuilder = new RecipeReplacementPromptBuilder()
                 .WithRecipeToReplace(recipeToReplace.Title, recipeToReplace.Description)
                 .WithWeekStartDate(parameters.WeekStartDate)
                 .WithSeasonalFoods(parameters.SeasonalFoods, parameters.WeekStartDate)
-                .WithCalorieConstraints(parameters.MinKcalPerDish, parameters.MaxKcalPerDish)
-                .WithBannedFoods(parameters.BannedFoods)
-                .WithMaxPreparationTime(parameters.MaxPreparationTime)
-                .WithMaxCookingTime(parameters.MaxCookingTime);
-            
+                .WithCalorieConstraints(configParams.MinKcalPerDish, configParams.MaxKcalPerDish)
+                .WithBannedFoods(configParams.BannedFoods)
+                .WithMaxPreparationTime(configParams.MaxPreparationTime)
+                .WithMaxCookingTime(configParams.MaxCookingTime);
+
             var prompt = promptBuilder.Build();
 
             var systemMessage = "Tu es un expert en cuisine française qui génère des recettes. Tu réponds toujours en JSON valide, sans texte avant ou après le JSON.";

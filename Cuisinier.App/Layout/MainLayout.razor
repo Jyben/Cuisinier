@@ -19,31 +19,35 @@
         <MudText Typo="Typo.h6" Style="font-weight: 700; font-size: 1.2rem;">Cuisinier</MudText>
         <MudSpacer />
         <AuthorizeView>
-            <Authorized>
+            <Authorized Context="authContext">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="margin-right: 8px;">
-                    <MudText Typo="Typo.body2" Style="text-transform: none;">@context.User.Identity?.Name</MudText>
-                    <MudMenu @bind-Open="_userMenuOpen" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudText Typo="Typo.body2" Style="text-transform: none;">@GetUserDisplayName(authContext.User)</MudText>
+                    <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                         <ActivatorContent>
-                            <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
-                                          Size="Size.Medium"
-                                          Variant="Variant.Text"
-                                          Color="Color.Inherit"
-                                          Edge="Edge.End"
-                                          OnClick="@((e) => _userMenuOpen = !_userMenuOpen)" />
+                            <MudButton Variant="Variant.Text" Style="min-width: auto; padding: 4px;">
+                                <MudAvatar Color="Color.Primary"
+                                           Size="Size.Small"
+                                           Style="font-weight: 600; font-size: 0.75rem;">
+                                    @GetInitials(GetUserDisplayName(authContext.User))
+                                </MudAvatar>
+                            </MudButton>
                         </ActivatorContent>
                         <ChildContent>
-                            <MudMenuItem Disabled="true" Style="cursor: default;">
-                                <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@GetUserDisplayName(context.User)</MudText>
-                                    <MudText Typo="Typo.caption" Style="color: gray;">@GetUserEmail(context.User)</MudText>
-                                </MudStack>
+                            <div class="user-menu-header">
+                                <MudAvatar Color="Color.Primary" Size="Size.Medium" Style="font-weight: 600;">
+                                    @GetInitials(GetUserDisplayName(authContext.User))
+                                </MudAvatar>
+                                <div class="user-menu-info">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 600;">@GetUserDisplayName(authContext.User)</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetUserEmail(authContext.User)</MudText>
+                                </div>
+                            </div>
+                            <MudDivider Class="my-1" />
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Settings" Href="/settings">
+                                Paramètres
                             </MudMenuItem>
-                            <MudDivider />
-                            <MudMenuItem Icon="@Icons.Material.Filled.Person" Href="/settings">
-                                Mon compte
-                            </MudMenuItem>
-                            <MudDivider />
-                            <MudMenuItem OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout">
+                            <MudDivider Class="my-1" />
+                            <MudMenuItem OnClick="HandleLogout" Icon="@Icons.Material.Outlined.Logout" IconColor="Color.Error" Style="color: var(--mud-palette-error);">
                                 Déconnexion
                             </MudMenuItem>
                         </ChildContent>
@@ -67,7 +71,6 @@
 
 @code {
     bool _drawerOpen = true;
-    bool _userMenuOpen = false;
 
     void ToggleDrawer()
     {
@@ -76,7 +79,6 @@
 
     private async Task HandleLogout()
     {
-        _userMenuOpen = false;
         await AuthService.LogoutAsync();
         ((Components.AuthStateProvider)AuthStateProvider).NotifyUserAuthenticationChanged();
         Navigation.NavigateTo("/login");
@@ -84,13 +86,49 @@
 
     private string GetUserDisplayName(ClaimsPrincipal user)
     {
-        return user.Identity?.Name ?? user.FindFirst(ClaimTypes.Name)?.Value ?? "Utilisateur";
+        return user.FindFirst("unique_name")?.Value
+            ?? user.FindFirst("name")?.Value
+            ?? "Utilisateur";
     }
 
     private string GetUserEmail(ClaimsPrincipal user)
     {
-        return user.FindFirst(ClaimTypes.Email)?.Value 
-            ?? user.FindFirst("email")?.Value 
+        return user.FindFirst(ClaimTypes.Email)?.Value
+            ?? user.FindFirst("email")?.Value
             ?? string.Empty;
     }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "?";
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+
+        return name.Length >= 2 ? name[..2].ToUpper() : name.ToUpper();
+    }
 }
+
+<style>
+    .user-menu-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        min-width: 220px;
+    }
+
+    .user-menu-info {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .user-menu-info .mud-typography {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>

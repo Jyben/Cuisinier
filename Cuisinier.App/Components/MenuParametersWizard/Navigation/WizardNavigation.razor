@@ -1,0 +1,64 @@
+@using MudBlazor
+
+<MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" Class="wizard-navigation mt-4">
+    <!-- Bouton Précédent -->
+    <MudButton Variant="Variant.Text"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.ArrowBack"
+               OnClick="OnPrevious"
+               Disabled="@(CurrentStep == 1 || IsGenerating)"
+               Class="@(CurrentStep == 1 ? "invisible" : "")">
+        Précédent
+    </MudButton>
+
+    <!-- Bouton Suivant ou Générer -->
+    @if (CurrentStep < TotalSteps)
+    {
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.ArrowForward"
+                   OnClick="OnNext"
+                   Disabled="@(!CanGoNext || IsGenerating)">
+            Suivant
+        </MudButton>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Restaurant"
+                   OnClick="OnGenerate"
+                   Disabled="@IsGenerating">
+            @if (IsGenerating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Génération...</span>
+            }
+            else
+            {
+                <span>Générer le menu</span>
+            }
+        </MudButton>
+    }
+</MudStack>
+
+<style>
+    .wizard-navigation {
+        padding-top: 1rem;
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .wizard-navigation .invisible {
+        visibility: hidden;
+    }
+</style>
+
+@code {
+    [Parameter] public int CurrentStep { get; set; } = 1;
+    [Parameter] public int TotalSteps { get; set; } = 4;
+    [Parameter] public bool CanGoNext { get; set; } = true;
+    [Parameter] public bool IsGenerating { get; set; } = false;
+    [Parameter] public EventCallback OnPrevious { get; set; }
+    [Parameter] public EventCallback OnNext { get; set; }
+    [Parameter] public EventCallback OnGenerate { get; set; }
+}
