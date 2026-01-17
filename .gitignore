@@ -192,3 +192,5 @@ docs/
 scripts/
 .cursor/
 .claude/
+TestResults/
+CLAUDE.md

@@ -26,12 +26,18 @@
                               @bind-Value="_request.Email" 
                               For="@(() => _request.Email)" />
                 
-                <MudTextField T="string" 
-                              Label="Mot de passe" 
-                              Variant="Variant.Outlined" 
-                              InputType="InputType.Password" 
-                              @bind-Value="_request.Password" 
+                <MudTextField T="string"
+                              Label="Mot de passe"
+                              Variant="Variant.Outlined"
+                              InputType="InputType.Password"
+                              @bind-Value="_request.Password"
                               For="@(() => _request.Password)" />
+
+                <MudCheckBox T="bool"
+                             @bind-Value="_request.RememberMe"
+                             Label="Se souvenir de moi"
+                             Color="Color.Primary"
+                             Class="mt-2" />
             </MudForm>
         </MudCardContent>
         <MudCardActions>

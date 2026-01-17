@@ -90,15 +90,8 @@ public static class FamilyLinkEndpoints
             return Results.Unauthorized();
         }
 
-        try
-        {
-            var invitation = await familyLinkService.SendInvitationAsync(userId, request.Email);
-            return Results.Ok(invitation);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.BadRequest(new { error = ex.Message });
-        }
+        var invitation = await familyLinkService.SendInvitationAsync(userId, request.Email);
+        return Results.Ok(invitation);
     }
 
     private static async Task<IResult> AcceptInvitation(
@@ -112,27 +105,20 @@ public static class FamilyLinkEndpoints
             return Results.Unauthorized();
         }
 
-        try
+        FamilyLinkResponse link;
+        if (!string.IsNullOrEmpty(request.Token))
         {
-            FamilyLinkResponse link;
-            if (!string.IsNullOrEmpty(request.Token))
-            {
-                link = await familyLinkService.AcceptInvitationByTokenAsync(userId, request.Token);
-            }
-            else if (request.InvitationId.HasValue)
-            {
-                link = await familyLinkService.AcceptInvitationByIdAsync(userId, request.InvitationId.Value);
-            }
-            else
-            {
-                return Results.BadRequest(new { error = "Token ou InvitationId requis." });
-            }
-            return Results.Ok(link);
+            link = await familyLinkService.AcceptInvitationByTokenAsync(userId, request.Token);
         }
-        catch (InvalidOperationException ex)
+        else if (request.InvitationId.HasValue)
         {
-            return Results.BadRequest(new { error = ex.Message });
+            link = await familyLinkService.AcceptInvitationByIdAsync(userId, request.InvitationId.Value);
         }
+        else
+        {
+            throw new ArgumentException("Token ou InvitationId requis.");
+        }
+        return Results.Ok(link);
     }
 
     private static async Task<IResult> RejectInvitation(
@@ -146,19 +132,8 @@ public static class FamilyLinkEndpoints
             return Results.Unauthorized();
         }
 
-        try
-        {
-            await familyLinkService.RejectInvitationAsync(userId, invitationId);
-            return Results.NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return Results.NotFound();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.BadRequest(new { error = ex.Message });
-        }
+        await familyLinkService.RejectInvitationAsync(userId, invitationId);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> CancelInvitation(
@@ -172,19 +147,8 @@ public static class FamilyLinkEndpoints
             return Results.Unauthorized();
         }
 
-        try
-        {
-            await familyLinkService.CancelSentInvitationAsync(userId, invitationId);
-            return Results.NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return Results.NotFound();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.BadRequest(new { error = ex.Message });
-        }
+        await familyLinkService.CancelSentInvitationAsync(userId, invitationId);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> DeleteFamilyLink(
@@ -197,14 +161,7 @@ public static class FamilyLinkEndpoints
             return Results.Unauthorized();
         }
 
-        try
-        {
-            await familyLinkService.DeleteFamilyLinkAsync(userId);
-            return Results.NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return Results.NotFound();
-        }
+        await familyLinkService.DeleteFamilyLinkAsync(userId);
+        return Results.NoContent();
     }
 }

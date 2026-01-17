@@ -160,9 +160,11 @@ public static class AuthEndpoints
         var roleClaims = roles.Select(role => new Claim(ClaimTypes.Role, role));
         var accessToken = jwtService.GenerateAccessToken(user.Id, user.Email!, user.UserName!, roleClaims);
 
-        // Generate refresh token
+        // Generate refresh token with duration based on RememberMe option
         var refreshTokenValue = jwtService.GenerateRefreshToken();
-        var refreshTokenExpirationDays = int.Parse(configuration["Jwt:RefreshTokenExpirationDays"] ?? "7");
+        var refreshTokenExpirationDays = request.RememberMe
+            ? int.Parse(configuration["Jwt:RefreshTokenExpirationDaysRememberMe"] ?? "30")
+            : int.Parse(configuration["Jwt:RefreshTokenExpirationDays"] ?? "1");
         var refreshToken = new RefreshToken
         {
             UserId = user.Id,
@@ -231,18 +233,20 @@ public static class AuthEndpoints
         // Revoke old token
         storedToken.RevokedAt = DateTime.UtcNow;
 
-        // Generate new tokens
+        // Generate new tokens, preserving the original token duration (for RememberMe support)
         var roles = await userManager.GetRolesAsync(user);
         var roleClaims = roles.Select(role => new Claim(ClaimTypes.Role, role));
         var newAccessToken = jwtService.GenerateAccessToken(user.Id, user.Email!, user.UserName!, roleClaims);
         var newRefreshTokenValue = jwtService.GenerateRefreshToken();
-        var refreshTokenExpirationDays = int.Parse(configuration["Jwt:RefreshTokenExpirationDays"] ?? "7");
+
+        // Calculate original duration from the old token to preserve RememberMe setting
+        var originalDuration = storedToken.ExpiresAt - storedToken.CreatedAt;
 
         var newRefreshToken = new RefreshToken
         {
             UserId = user.Id,
             Token = jwtService.HashToken(newRefreshTokenValue), // Hash token before storing
-            ExpiresAt = DateTime.UtcNow.AddDays(refreshTokenExpirationDays)
+            ExpiresAt = DateTime.UtcNow.Add(originalDuration)
         };
 
         context.RefreshTokens.Add(newRefreshToken);
