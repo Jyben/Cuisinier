@@ -13,6 +13,7 @@ public interface IMenuService
     Task<RecipeResponse> ReplaceRecipeAsync(int menuId, int recipeId, RecipeReplacementRequest request, string userId);
     Task<RecipeResponse> ReplaceIngredientAsync(int menuId, int recipeId, IngredientReplacementRequest request, string userId);
     Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId, string userId);
+    Task<RecipeResponse> AddDishToMenuAsync(int menuId, int dishId, string userId);
     Task DeleteRecipeAsync(int menuId, int recipeId, string userId);
     Task<RecipeResponse> ToggleRecipeCookedStatusAsync(int menuId, int recipeId, string userId);
     Task DeleteMenuAsync(int menuId, string userId);

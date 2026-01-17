@@ -15,4 +15,5 @@ public class DishFilterRequest
     public int PageSize { get; set; } = 20;
     public string? SortBy { get; set; } // "title", "createdAt", "kcal", etc.
     public bool SortDescending { get; set; } = false;
+    public bool FavoritesOnly { get; set; } = false;
 }

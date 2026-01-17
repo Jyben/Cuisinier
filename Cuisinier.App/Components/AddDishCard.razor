@@ -1,16 +1,16 @@
 @using MudBlazor
 
-<MudCard Elevation="0" Class="add-favorite-card" @onclick="HandleCardClick">
+<MudCard Elevation="0" Class="add-dish-card" @onclick="HandleCardClick">
     <MudCardContent Class="pa-3" Style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
         <MudStack AlignItems="AlignItems.Center" Spacing="3">
             <MudIcon Icon="@Icons.Material.Outlined.AddCircleOutline" Size="Size.Large" Style="color: rgba(0,0,0,0.38);" />
-            <MudButton 
-                Variant="Variant.Outlined" 
-                Color="Color.Primary" 
-                StartIcon="@Icons.Material.Filled.Favorite"
+            <MudButton
+                Variant="Variant.Outlined"
+                Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Restaurant"
                 Size="Size.Medium"
                 OnClick="HandleCardClick">
-                Ajouter un favori
+                Ajouter un plat
             </MudButton>
         </MudStack>
     </MudCardContent>
@@ -26,7 +26,7 @@
 }
 
 <style>
-    .add-favorite-card {
+    .add-dish-card {
         border: 2px dashed rgba(0, 0, 0, 0.12);
         border-radius: var(--mud-default-borderradius, 4px);
         background-color: transparent !important;
@@ -36,17 +36,17 @@
         flex-direction: column;
     }
 
-    .add-favorite-card .mud-card-content {
+    .add-dish-card .mud-card-content {
         background-color: transparent !important;
     }
 
-    .add-favorite-card:hover {
+    .add-dish-card:hover {
         border-color: var(--mud-palette-primary, #1976d2);
         background-color: rgba(25, 118, 210, 0.04) !important;
         cursor: pointer;
     }
 
-    .add-favorite-card:hover .mud-card-content {
+    .add-dish-card:hover .mud-card-content {
         background-color: rgba(25, 118, 210, 0.04) !important;
     }
 </style>

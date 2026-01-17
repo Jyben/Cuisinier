@@ -21,6 +21,7 @@ using Cuisinier.Api.Services;
 using Cuisinier.Api.Middleware;
 using Cuisinier.Api.HealthChecks;
 using Cuisinier.Shared.Validators;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -254,6 +255,7 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
 // Correlation ID Middleware (must be early in pipeline, before exception handling)

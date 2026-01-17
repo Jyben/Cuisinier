@@ -73,6 +73,14 @@ public static class DishEndpoints
             .Include(d => d.Ingredients)
             .AsQueryable();
 
+        // Apply favorites filter - filter dishes that match user's favorite titles
+        if (filter.FavoritesOnly)
+        {
+            // Use a subquery join approach with case-insensitive comparison
+            query = query.Where(d => context.Favorites
+                .Any(f => f.UserId == userId && f.Title.ToLower() == d.Title.ToLower()));
+        }
+
         // Apply search term filter
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {

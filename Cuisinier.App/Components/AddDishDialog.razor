@@ -1,45 +1,47 @@
 @using Cuisinier.App.Services
 @using Cuisinier.Shared.DTOs
 @using MudBlazor
-@inject IFavoriteApi FavoriteApi
+@inject IDishApi DishApi
 @inject IMenuApi MenuApi
 @inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
+        <DishSearchPanel Filter="_filter" FilterChanged="OnFilterChanged" ShowFavoritesFilter="true" />
+
         @if (_loading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-3" />
         }
-        
-        @if (_favorites != null && _favorites.Any())
+
+        @if (_dishes != null && _dishes.Any())
         {
             <MudGrid Spacing="2">
-                @foreach (var favorite in _favorites)
+                @foreach (var dish in _dishes)
                 {
                     <MudItem xs="12" sm="6">
-                        <MudCard Elevation="1" Class="favorite-selection-card" Style="cursor: pointer;" @onclick="@(() => SelectFavorite(favorite))">
+                        <MudCard Elevation="1" Class="dish-selection-card" Style="cursor: pointer;" @onclick="@(() => SelectDish(dish))">
                             <MudCardContent Class="pa-3">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    @if (!string.IsNullOrEmpty(favorite.ImageUrl))
+                                    @if (!string.IsNullOrEmpty(dish.ImageUrl))
                                     {
-                                        <MudImage Src="@favorite.ImageUrl" Alt="@favorite.Title" Width="80" Height="80" ObjectFit="ObjectFit.Cover" Style="border-radius: 4px;" />
+                                        <MudImage Src="@dish.ImageUrl" Alt="@dish.Title" Width="80" Height="80" ObjectFit="ObjectFit.Cover" Style="border-radius: 4px;" />
                                     }
                                     <MudStack Style="flex: 1;">
-                                        <MudText Typo="Typo.h6" Style="font-weight: 600; margin: 0;">@favorite.Title</MudText>
-                                        <MudText Typo="Typo.body2" Style="color: rgba(0,0,0,0.6); margin: 0;">@favorite.Description</MudText>
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600; margin: 0;">@dish.Title</MudText>
+                                        <MudText Typo="Typo.body2" Style="color: rgba(0,0,0,0.6); margin: 0;">@dish.Description</MudText>
                                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
                                             <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="color: rgba(0,0,0,0.54);" />
-                                            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@favorite.Servings</MudText>
-                                            @if (favorite.PreparationTime.HasValue)
+                                            <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@dish.Servings</MudText>
+                                            @if (dish.PreparationTime.HasValue)
                                             {
                                                 <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="ml-2" Style="color: rgba(0,0,0,0.54);" />
-                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.PreparationTime.Value.TotalMinutes)min</MudText>
+                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)dish.PreparationTime.Value.TotalMinutes)min</MudText>
                                             }
-                                            @if (favorite.CookingTime.HasValue)
+                                            @if (dish.CookingTime.HasValue)
                                             {
                                                 <MudIcon Icon="@Icons.Material.Filled.Microwave" Size="Size.Small" Class="ml-2" Style="color: rgba(0,0,0,0.54);" />
-                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)favorite.CookingTime.Value.TotalMinutes)min</MudText>
+                                                <MudText Typo="Typo.caption" Style="color: rgba(0,0,0,0.7);">@((int)dish.CookingTime.Value.TotalMinutes)min</MudText>
                                             }
                                         </MudStack>
                                     </MudStack>
@@ -49,11 +51,24 @@
                     </MudItem>
                 }
             </MudGrid>
+
+            @if (_totalPages > 1)
+            {
+                <MudStack Row="true" Justify="Justify.Center" Spacing="2" Class="mt-4">
+                    <MudPagination
+                        Count="@_totalPages"
+                        Selected="@_filter.Page"
+                        SelectedChanged="@OnPageChanged"
+                        BoundaryCount="1"
+                        ShowFirstButton="true"
+                        ShowLastButton="true" />
+                </MudStack>
+            }
         }
         else if (!_loading)
         {
             <MudText Typo="Typo.body2" Class="text-center" Style="color: rgba(0,0,0,0.6); padding: 2rem;">
-                Aucun plat favori disponible
+                Aucun plat disponible
             </MudText>
         }
     </DialogContent>
@@ -66,34 +81,52 @@
     [CascadingParameter] public IMudDialogInstance? MudDialog { get; set; }
     [Parameter] public int MenuId { get; set; }
     [Parameter] public bool IsPendingMode { get; set; } = false;
-    
-    private List<FavoriteResponse>? _favorites;
+
+    private List<DishResponse>? _dishes;
     private bool _loading = true;
     private bool _isAdding = false;
+    private DishFilterRequest _filter = new() { Page = 1, PageSize = 10 };
+    private int _totalPages = 0;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadFavorites();
+        await LoadDishes();
     }
 
-    private async Task LoadFavorites()
+    private async Task LoadDishes()
     {
         try
         {
             _loading = true;
-            _favorites = await FavoriteApi.GetAllFavoritesAsync();
+            StateHasChanged();
+            var response = await DishApi.GetAllDishesAsync(_filter);
+            _dishes = response.Dishes;
+            _totalPages = response.TotalPages;
         }
         catch
         {
-            Snackbar.Add("Impossible de charger les favoris. Veuillez réessayer.", Severity.Error);
+            Snackbar.Add("Impossible de charger les plats. Veuillez reessayer.", Severity.Error);
         }
         finally
         {
             _loading = false;
+            StateHasChanged();
         }
     }
 
-    private async Task SelectFavorite(FavoriteResponse favorite)
+    private async Task OnFilterChanged(DishFilterRequest filter)
+    {
+        _filter = filter;
+        await LoadDishes();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _filter.Page = page;
+        await LoadDishes();
+    }
+
+    private async Task SelectDish(DishResponse dish)
     {
         if (_isAdding) return;
 
@@ -102,14 +135,14 @@
         {
             if (IsPendingMode)
             {
-                // In pending mode, just return the favorite without calling API
-                MudDialog?.Close(DialogResult.Ok(favorite));
+                // In pending mode, just return the dish without calling API
+                MudDialog?.Close(DialogResult.Ok(dish));
             }
             else
             {
                 // For validated menus, add directly to database
-                await MenuApi.AddFavoriteToMenuAsync(MenuId, favorite.Id);
-                Snackbar.Add($"Plat '{favorite.Title}' ajouté au menu", Severity.Success);
+                await MenuApi.AddDishToMenuAsync(MenuId, dish.Id);
+                Snackbar.Add($"Plat '{dish.Title}' ajoute au menu", Severity.Success);
                 MudDialog?.Close(DialogResult.Ok(true));
             }
         }
@@ -130,11 +163,11 @@
 }
 
 <style>
-    .favorite-selection-card {
+    .dish-selection-card {
         transition: all 0.2s ease;
     }
 
-    .favorite-selection-card:hover {
+    .dish-selection-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15) !important;
     }

@@ -76,6 +76,14 @@ public static class MenuEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .RequireAuthorization();
 
+        group.MapPost("/{menuId:int}/dish/{dishId:int}", AddDishToMenu)
+            .WithName("AddDishToMenu")
+            .WithSummary("Add a dish to a menu")
+            .WithDescription("Adds a dish to an existing menu.")
+            .Produces<RecipeResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
+
         group.MapDelete("/{menuId:int}/recipe/{recipeId:int}", DeleteRecipe)
             .WithName("DeleteRecipe")
             .WithSummary("Delete a recipe from a menu")
@@ -247,6 +255,22 @@ public static class MenuEndpoints
         }
 
         var recipe = await menuService.AddFavoriteToMenuAsync(menuId, favoriteId, userId);
+        return Results.Ok(recipe);
+    }
+
+    private static async Task<IResult> AddDishToMenu(
+        int menuId,
+        int dishId,
+        ClaimsPrincipal user,
+        IMenuService menuService)
+    {
+        var userId = user.GetUserId();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var recipe = await menuService.AddDishToMenuAsync(menuId, dishId, userId);
         return Results.Ok(recipe);
     }
 

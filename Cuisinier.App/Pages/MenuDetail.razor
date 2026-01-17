@@ -47,7 +47,7 @@
         @if (_menuValid)
         {
             <MudItem xs="12" md="6" lg="4">
-                <AddFavoriteCard OnAddClick="OpenAddFavoriteDialog" />
+                <AddDishCard OnAddClick="OpenAddDishDialog" />
             </MudItem>
         }
     </MudGrid>
@@ -316,27 +316,27 @@
         }
     }
 
-    private async Task OpenAddFavoriteDialog()
+    private async Task OpenAddDishDialog()
     {
-        var parameters = new DialogParameters<AddFavoriteDialog>
+        var parameters = new DialogParameters<AddDishDialog>
         {
             { x => x.MenuId, MenuId }
         };
 
         var options = new DialogOptions
         {
-            MaxWidth = MaxWidth.Medium,
+            MaxWidth = MaxWidth.Large,
             FullWidth = true,
             CloseButton = true
         };
 
-        var dialog = await DialogService.ShowAsync<AddFavoriteDialog>("Ajouter un plat favori", parameters, options);
+        var dialog = await DialogService.ShowAsync<AddDishDialog>("Ajouter un plat", parameters, options);
         var result = await dialog.Result;
 
         if (result != null && !result.Canceled)
         {
             await LoadMenu();
-            // Recheck favorites after adding a new favorite
+            // Recheck favorites after adding a new dish
             await CheckFavoritesBatch();
         }
     }

@@ -28,7 +28,10 @@ public interface IMenuApi
     
     [Post("/api/menu/{menuId}/favorite/{favoriteId}")]
     Task<RecipeResponse> AddFavoriteToMenuAsync(int menuId, int favoriteId);
-    
+
+    [Post("/api/menu/{menuId}/dish/{dishId}")]
+    Task<RecipeResponse> AddDishToMenuAsync(int menuId, int dishId);
+
     [Delete("/api/menu/{menuId}/recipe/{recipeId}")]
     Task DeleteRecipeAsync(int menuId, int recipeId);
     

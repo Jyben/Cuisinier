@@ -1,0 +1,132 @@
+@using Cuisinier.Shared.DTOs
+@using MudBlazor
+
+<MudCard Elevation="2" Class="mb-4">
+    <MudCardContent>
+        <MudGrid>
+            <MudItem xs="12" md="6" lg="@(ShowFavoritesFilter ? 3 : 4)">
+                <MudTextField
+                    @bind-Value="_searchTerm"
+                    DebounceInterval="400"
+                    OnDebounceIntervalElapsed="OnSearchTermChanged"
+                    Label="Rechercher"
+                    Placeholder="Nom du plat, description ou ingredient..."
+                    Variant="Variant.Outlined"
+                    Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.Search"
+                    Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6" lg="@(ShowFavoritesFilter ? 3 : 4)">
+                <MudTextField
+                    @bind-Value="_ingredientName"
+                    DebounceInterval="400"
+                    OnDebounceIntervalElapsed="OnIngredientNameChanged"
+                    Label="Ingredient"
+                    Placeholder="Filtrer par ingredient..."
+                    Variant="Variant.Outlined"
+                    Adornment="Adornment.Start"
+                    AdornmentIcon="@Icons.Material.Filled.ListAlt"
+                    Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6" lg="@(ShowFavoritesFilter ? 3 : 4)">
+                <MudSelect T="string"
+                    Value="_sortBy"
+                    ValueChanged="OnSortByChanged"
+                    Label="Trier par"
+                    Variant="Variant.Outlined"
+                    Immediate="true">
+                    <MudSelectItem Value="@((string?)null)">Date de creation</MudSelectItem>
+                    <MudSelectItem Value="@("title")">Titre</MudSelectItem>
+                    <MudSelectItem Value="@("createdAt")">Date de creation</MudSelectItem>
+                    <MudSelectItem Value="@("kcal")">Calories</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            @if (ShowFavoritesFilter)
+            {
+                <MudItem xs="12" md="6" lg="3">
+                    <MudSwitch
+                        T="bool"
+                        Value="_favoritesOnly"
+                        ValueChanged="OnFavoritesOnlyChanged"
+                        Label="Favoris uniquement"
+                        Color="Color.Primary"
+                        Class="mt-2" />
+                </MudItem>
+            }
+        </MudGrid>
+        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Class="mt-3">
+            <MudButton
+                Variant="Variant.Outlined"
+                Color="Color.Default"
+                OnClick="ResetFilters"
+                StartIcon="@Icons.Material.Filled.Clear">
+                Reinitialiser
+            </MudButton>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public DishFilterRequest Filter { get; set; } = new();
+    [Parameter] public EventCallback<DishFilterRequest> FilterChanged { get; set; }
+    [Parameter] public bool ShowFavoritesFilter { get; set; } = true;
+
+    private string? _searchTerm;
+    private string? _ingredientName;
+    private string? _sortBy;
+    private bool _favoritesOnly;
+
+    protected override void OnParametersSet()
+    {
+        _searchTerm = Filter.SearchTerm;
+        _ingredientName = Filter.IngredientName;
+        _sortBy = Filter.SortBy;
+        _favoritesOnly = Filter.FavoritesOnly;
+    }
+
+    private async Task OnSearchTermChanged()
+    {
+        Filter.SearchTerm = _searchTerm;
+        Filter.Page = 1;
+        await FilterChanged.InvokeAsync(Filter);
+    }
+
+    private async Task OnIngredientNameChanged()
+    {
+        Filter.IngredientName = _ingredientName;
+        Filter.Page = 1;
+        await FilterChanged.InvokeAsync(Filter);
+    }
+
+    private async Task OnSortByChanged(string? value)
+    {
+        _sortBy = value;
+        Filter.SortBy = value;
+        Filter.Page = 1;
+        await FilterChanged.InvokeAsync(Filter);
+    }
+
+    private async Task OnFavoritesOnlyChanged(bool value)
+    {
+        _favoritesOnly = value;
+        Filter.FavoritesOnly = value;
+        Filter.Page = 1;
+        await FilterChanged.InvokeAsync(Filter);
+    }
+
+    private async Task ResetFilters()
+    {
+        _searchTerm = null;
+        _ingredientName = null;
+        _sortBy = null;
+        _favoritesOnly = false;
+
+        Filter.SearchTerm = null;
+        Filter.IngredientName = null;
+        Filter.SortBy = null;
+        Filter.FavoritesOnly = false;
+        Filter.Page = 1;
+
+        await FilterChanged.InvokeAsync(Filter);
+    }
+}

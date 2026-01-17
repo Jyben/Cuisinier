@@ -792,6 +792,105 @@ public class MenuService : IMenuService
         return recipe.ToResponse();
     }
 
+    public async Task<RecipeResponse> AddDishToMenuAsync(int menuId, int dishId, string userId)
+    {
+        _logger.LogInformation("Adding dish to menu. MenuId: {MenuId}, DishId: {DishId}", menuId, dishId);
+
+        // Get accessible user IDs (includes linked family user if any)
+        var accessibleUserIds = await _userAccessService.GetAccessibleUserIdsAsync(userId);
+
+        var menu = await _context.Menus
+            .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
+
+        if (menu == null)
+        {
+            throw new KeyNotFoundException($"Menu {menuId} not found for user {userId}");
+        }
+
+        // Dishes are shared (not user-specific), so we don't filter by userId
+        var dish = await _context.Dishes
+            .Include(d => d.Ingredients)
+            .FirstOrDefaultAsync(d => d.Id == dishId);
+
+        if (dish == null)
+        {
+            throw new KeyNotFoundException($"Dish {dishId} not found");
+        }
+
+        // Convert dish to recipe
+        var recipe = new Recipe
+        {
+            MenuId = menuId,
+            Title = dish.Title,
+            Description = dish.Description,
+            CompleteDescription = dish.CompleteDescription,
+            DetailedRecipe = dish.DetailedRecipe,
+            ImageUrl = dish.ImageUrl,
+            PreparationTime = dish.PreparationTime,
+            CookingTime = dish.CookingTime,
+            Kcal = dish.Kcal,
+            Servings = dish.Servings,
+            IsFromDatabase = true,
+            DishId = dish.Id,
+            OriginalDishId = dish.Id,
+            Ingredients = dish.Ingredients.Select(i => new RecipeIngredient
+            {
+                Name = i.Name,
+                Quantity = i.Quantity,
+                Category = i.Category
+            }).ToList()
+        };
+
+        _context.Recipes.Add(recipe);
+        await _context.SaveChangesAsync();
+
+        // Load with ingredients for response
+        await _context.Entry(recipe)
+            .Collection(r => r.Ingredients)
+            .LoadAsync();
+
+        // Update shopping list if it exists (menu already validated)
+        var existingShoppingList = await _context.ShoppingLists
+            .Include(sl => sl.Items)
+            .FirstOrDefaultAsync(sl => sl.MenuId == menuId && accessibleUserIds.Contains(sl.UserId));
+
+        if (existingShoppingList != null)
+        {
+            // Add ingredients from dish recipe to shopping list
+            foreach (var ingredient in recipe.Ingredients)
+            {
+                var shoppingListItem = new ShoppingListItem
+                {
+                    ShoppingListId = existingShoppingList.Id,
+                    Name = ingredient.Name,
+                    Quantity = ingredient.Quantity,
+                    Category = ingredient.Category,
+                    IsManuallyAdded = false
+                };
+
+                _context.ShoppingListItems.Add(shoppingListItem);
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Shopping list updated with dish ingredients. MenuId: {MenuId}, ItemsAdded: {ItemsCount}",
+                menuId,
+                recipe.Ingredients.Count);
+        }
+
+        // Invalidate cache for all accessible users
+        foreach (var uid in accessibleUserIds)
+        {
+            _cache.Remove($"{MenuCacheKeyPrefix}{uid}_{menuId}");
+            _cache.Remove($"{AllMenusCacheKey}_{uid}");
+        }
+
+        _logger.LogInformation("Dish added to menu successfully. MenuId: {MenuId}, RecipeId: {RecipeId}, UserId: {UserId}", menuId, recipe.Id, userId);
+
+        return recipe.ToResponse();
+    }
+
     public async Task DeleteRecipeAsync(int menuId, int recipeId, string userId)
     {
         _logger.LogInformation(
@@ -1074,6 +1173,61 @@ public class MenuService : IMenuService
             _logger.LogInformation(
                 "Added {Count} favorites to menu. MenuId: {MenuId}",
                 favorites.Count,
+                menuId);
+        }
+
+        // Add dishes if provided (dishes are shared, not user-specific)
+        if (request?.DishIds != null && request.DishIds.Any())
+        {
+            var dishes = await _context.Dishes
+                .Include(d => d.Ingredients)
+                .Where(d => request.DishIds.Contains(d.Id))
+                .ToListAsync();
+
+            foreach (var dish in dishes)
+            {
+                var recipe = new Recipe
+                {
+                    MenuId = menuId,
+                    Title = dish.Title,
+                    Description = dish.Description,
+                    CompleteDescription = dish.CompleteDescription,
+                    DetailedRecipe = dish.DetailedRecipe,
+                    ImageUrl = dish.ImageUrl,
+                    PreparationTime = dish.PreparationTime,
+                    CookingTime = dish.CookingTime,
+                    Kcal = dish.Kcal,
+                    Servings = dish.Servings,
+                    IsFromDatabase = true,
+                    DishId = dish.Id,
+                    OriginalDishId = dish.Id,
+                    Ingredients = dish.Ingredients.Select(i => new RecipeIngredient
+                    {
+                        Name = i.Name,
+                        Quantity = i.Quantity,
+                        Category = i.Category
+                    }).ToList()
+                };
+
+                menu.Recipes.Add(recipe);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Reload menu with new recipes
+            menu = await _context.Menus
+                .Include(m => m.Recipes)
+                    .ThenInclude(r => r.Ingredients)
+                .FirstOrDefaultAsync(m => m.Id == menuId && accessibleUserIds.Contains(m.UserId));
+
+            if (menu == null)
+            {
+                throw new InvalidOperationException("Failed to reload menu after adding dishes");
+            }
+
+            _logger.LogInformation(
+                "Added {Count} dishes to menu. MenuId: {MenuId}",
+                dishes.Count,
                 menuId);
         }
 

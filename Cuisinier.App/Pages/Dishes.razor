@@ -12,58 +12,7 @@
 
 <PageHeader Title="Tous les plats" />
 
-<MudCard Elevation="2" Class="mb-4">
-    <MudCardContent>
-        <MudGrid>
-            <MudItem xs="12" md="6" lg="4">
-                <MudTextField 
-                    @bind-Value="_filter.SearchTerm"
-                    DebounceInterval="400"
-                    OnDebounceIntervalElapsed="OnFiltersChanged"
-                    Label="Rechercher"
-                    Placeholder="Nom du plat, description ou ingrédient..."
-                    Variant="Variant.Outlined"
-                    Adornment="Adornment.Start"
-                    AdornmentIcon="@Icons.Material.Filled.Search"
-                    Immediate="true" />
-            </MudItem>
-            <MudItem xs="12" md="6" lg="4">
-                <MudTextField 
-                    @bind-Value="_filter.IngredientName"
-                    DebounceInterval="400"
-                    OnDebounceIntervalElapsed="OnFiltersChanged"
-                    Label="Ingrédient"
-                    Placeholder="Filtrer par ingrédient..."
-                    Variant="Variant.Outlined"
-                    Adornment="Adornment.Start"
-                    AdornmentIcon="@Icons.Material.Filled.ListAlt"
-                    Immediate="true" />
-            </MudItem>
-            <MudItem xs="12" md="6" lg="4">
-                <MudSelect T="string"
-                    Value="_filter.SortBy"
-                    ValueChanged="@(async v => { _filter.SortBy = v; await OnFiltersChanged(); })"
-                    Label="Trier par"
-                    Variant="Variant.Outlined"
-                    Immediate="true">
-                    <MudSelectItem Value="@((string?)null)">Date de création</MudSelectItem>
-                    <MudSelectItem Value="@("title")">Titre</MudSelectItem>
-                    <MudSelectItem Value="@("createdAt")">Date de création</MudSelectItem>
-                    <MudSelectItem Value="@("kcal")">Calories</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
-        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd" Class="mt-3">
-            <MudButton 
-                Variant="Variant.Outlined" 
-                Color="Color.Default"
-                OnClick="ResetFilters"
-                StartIcon="@Icons.Material.Filled.Clear">
-                Réinitialiser
-            </MudButton>
-        </MudStack>
-    </MudCardContent>
-</MudCard>
+<DishSearchPanel Filter="_filter" FilterChanged="OnFilterChanged" ShowFavoritesFilter="false" />
 
 @if (_loading)
 {
@@ -206,7 +155,6 @@ else if (!_loading)
     private bool _loading = true;
     private DishFilterRequest _filter = new() { Page = 1, PageSize = 20 };
     private int _totalPages = 0;
-    private System.Threading.Timer? _searchTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -232,29 +180,15 @@ else if (!_loading)
         }
     }
 
-    private async Task OnFiltersChanged()
+    private async Task OnFilterChanged(DishFilterRequest filter)
     {
-        _filter.Page = 1; // Reset to first page when searching
-        _searchTimer?.Dispose();
-        _searchTimer = new System.Threading.Timer(async _ =>
-        {
-            await InvokeAsync(async () =>
-            {
-                await LoadDishes();
-                StateHasChanged();
-            });
-        }, null, 500, Timeout.Infinite);
+        _filter = filter;
+        await LoadDishes();
     }
 
     private async Task OnPageChanged(int page)
     {
         _filter.Page = page;
-        await LoadDishes();
-    }
-
-    private async Task ResetFilters()
-    {
-        _filter = new DishFilterRequest { Page = 1, PageSize = 20 };
         await LoadDishes();
     }
 

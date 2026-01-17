@@ -49,14 +49,14 @@
                     MenuValid="@_menuValid" />
             </MudItem>
         }
-        @foreach (var favorite in _pendingFavorites)
+        @foreach (var dish in _pendingDishes)
         {
             <MudItem xs="12" md="6" lg="4">
-                <RecipeCard 
-                    Recipe="@ConvertFavoriteToRecipe(favorite)" 
-                    ShowActions="true" 
+                <RecipeCard
+                    Recipe="@ConvertDishToRecipe(dish)"
+                    ShowActions="true"
                     ShowFavoriteButton="false"
-                    OnDelete="@(() => RemovePendingFavorite(favorite.Id))" 
+                    OnDelete="@(() => RemovePendingDish(dish.Id))"
                     OnReplace="@(() => {})"
                     IsGenerating="false"
                     MenuValid="@_menuValid" />
@@ -65,7 +65,7 @@
         @if (!_menuValid)
         {
             <MudItem xs="12" md="6" lg="4">
-                <AddFavoriteCard OnAddClick="OpenAddFavoriteDialog" />
+                <AddDishCard OnAddClick="OpenAddDishDialog" />
             </MudItem>
         }
     </MudGrid>
@@ -107,7 +107,7 @@
     private Dictionary<int, bool> _recipesBeingGenerated = new();
     private Dictionary<int, bool> _recipesBeingReplaced = new();
     private int? _lastConnectedMenuId = null;
-    private List<FavoriteResponse> _pendingFavorites = new();
+    private List<DishResponse> _pendingDishes = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -294,10 +294,10 @@
 
     private async Task DeleteRecipe(int recipeId)
     {
-        // If recipeId is negative, it's a pending favorite
+        // If recipeId is negative, it's a pending dish
         if (recipeId < 0)
         {
-            RemovePendingFavorite(-recipeId);
+            RemovePendingDish(-recipeId);
             return;
         }
 
@@ -369,7 +369,8 @@
 
             var request = new ValidateMenuRequest
             {
-                FavoriteIds = _pendingFavorites.Select(f => f.Id).ToList()
+                FavoriteIds = new List<int>(),
+                DishIds = _pendingDishes.Select(d => d.Id).ToList()
             };
 
             await MenuApi.ValidateMenuAsync(MenuId, request);
@@ -402,9 +403,9 @@
         }
     }
 
-    private async Task OpenAddFavoriteDialog()
+    private async Task OpenAddDishDialog()
     {
-        var parameters = new DialogParameters<AddFavoriteDialog>
+        var parameters = new DialogParameters<AddDishDialog>
         {
             { x => x.MenuId, MenuId },
             { x => x.IsPendingMode, true }
@@ -412,46 +413,46 @@
 
         var options = new DialogOptions
         {
-            MaxWidth = MaxWidth.Medium,
+            MaxWidth = MaxWidth.Large,
             FullWidth = true,
             CloseButton = true
         };
 
-        var dialog = await DialogService.ShowAsync<AddFavoriteDialog>("Ajouter un plat favori", parameters, options);
+        var dialog = await DialogService.ShowAsync<AddDishDialog>("Ajouter un plat", parameters, options);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled && result.Data is FavoriteResponse favorite)
+        if (result != null && !result.Canceled && result.Data is DishResponse dish)
         {
-            if (!_pendingFavorites.Any(f => f.Id == favorite.Id))
+            if (!_pendingDishes.Any(d => d.Id == dish.Id))
             {
-                _pendingFavorites.Add(favorite);
+                _pendingDishes.Add(dish);
                 StateHasChanged();
             }
         }
     }
 
-    private void RemovePendingFavorite(int favoriteId)
+    private void RemovePendingDish(int dishId)
     {
-        _pendingFavorites.RemoveAll(f => f.Id == favoriteId);
+        _pendingDishes.RemoveAll(d => d.Id == dishId);
         StateHasChanged();
     }
 
-    private RecipeResponse ConvertFavoriteToRecipe(FavoriteResponse favorite)
+    private RecipeResponse ConvertDishToRecipe(DishResponse dish)
     {
         return new RecipeResponse
         {
-            Id = -favorite.Id, // Negative ID to distinguish from real recipes
+            Id = -dish.Id, // Negative ID to distinguish from real recipes
             MenuId = MenuId,
-            Title = favorite.Title,
-            Description = favorite.Description,
-            CompleteDescription = favorite.CompleteDescription,
-            DetailedRecipe = favorite.DetailedRecipe,
-            ImageUrl = favorite.ImageUrl,
-            PreparationTime = favorite.PreparationTime,
-            CookingTime = favorite.CookingTime,
-            Kcal = favorite.Kcal,
-            Servings = favorite.Servings,
-            Ingredients = favorite.Ingredients.Select(i => new IngredientResponse
+            Title = dish.Title,
+            Description = dish.Description,
+            CompleteDescription = dish.CompleteDescription,
+            DetailedRecipe = dish.DetailedRecipe,
+            ImageUrl = dish.ImageUrl,
+            PreparationTime = dish.PreparationTime,
+            CookingTime = dish.CookingTime,
+            Kcal = dish.Kcal,
+            Servings = dish.Servings,
+            Ingredients = dish.Ingredients.Select(i => new IngredientResponse
             {
                 Id = i.Id,
                 Name = i.Name,
@@ -459,7 +460,7 @@
                 Category = i.Category
             }).ToList(),
             IsFromDatabase = true,
-            OriginalDishId = favorite.Id
+            OriginalDishId = dish.Id
         };
     }
 
