@@ -15,9 +15,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
+        
+        # Timeout settings: 60s is sufficient for typical API requests
+        # Covers recipe generation and menu operations which complete within this timeframe
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 
     location /recetteHub {
@@ -28,7 +31,10 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
 
-        proxy_read_timeout 86400;
+        # WebSocket timeout: 1 hour allows for long-running recipe generation sessions
+        # while preventing indefinite resource consumption. Connections will be
+        # re-established automatically if needed for longer sessions.
+        proxy_read_timeout 1h;
     }
 
     listen 443 ssl; # managed by Certbot
